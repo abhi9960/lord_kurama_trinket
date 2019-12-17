@@ -743,10 +743,18 @@ ifeq ($(ODM_WT_EDIT),yes)
 ifeq ($(WT_FINAL_RELEASE),yes)
 KBUILD_CFLAGS	+= -O2 $(call cc-disable-warning,maybe-uninitialized,)
 else
+ifeq ($(cc-name),clang)
+KBUILD_CFLAGS   += -O3
+else
 KBUILD_CFLAGS   += -O2
 endif # WT_FINAL_RELEASE
 endif # ODM_WT_EDIT
 endif
+endif
+endif
+
+KBUILD_CFLAGS += $(call cc-ifversion, -lt, 0409, \
+			$(call cc-disable-warning,maybe-uninitialized,))
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
