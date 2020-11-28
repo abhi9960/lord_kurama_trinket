@@ -307,6 +307,14 @@ out_micb_en:
 			/* enable pullup and cs, disable mb */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
 		else
+			/* Jianfeng.Qiu@PSW.MM.AudioDriver.HeadsetDet, 2017/04/10,
+			 * 1.Modify for some headset button not work after headset mic
+			 * stop use.(ex: stop recording, hangup voice call without plug
+			 * out headset).
+			 * 2. Modify for headphone wrong detect as headset.1247369.
+			 * step: plug out headset when recording or in voice call,
+			 * then plug in a headphone, it detect as headset.
+			 */
 			/* enable current source and disable mb, pullup*/
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
 
@@ -607,6 +615,9 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
 		mbhc->force_linein = false;
+		#ifdef ODM_WT_EDIT
+		headset_notifier_call_chain(0,NULL);
+		#endif
 	} else {
 		/*
 		 * Report removal of current jack type.
@@ -726,6 +737,9 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				    (mbhc->hph_status | SND_JACK_MECHANICAL),
 				    WCD_MBHC_JACK_MASK);
 		wcd_mbhc_clr_and_turnon_hph_padac(mbhc);
+		#ifdef ODM_WT_EDIT
+		headset_notifier_call_chain(1,NULL);
+		#endif
 	}
 	pr_debug("%s: leave hph_status %x\n", __func__, mbhc->hph_status);
 }
@@ -1254,7 +1268,7 @@ static irqreturn_t wcd_mbhc_hphl_ocp_irq(int irq, void *data)
 	struct wcd_mbhc *mbhc = data;
 	int val;
 
-	pr_debug("%s: received HPHL OCP irq\n", __func__);
+	pr_err("%s: received HPHL OCP irq\n", __func__);
 	if (mbhc) {
 		if (mbhc->mbhc_cb->hph_register_recovery) {
 			if (mbhc->mbhc_cb->hph_register_recovery(mbhc)) {
@@ -1292,7 +1306,7 @@ static irqreturn_t wcd_mbhc_hphr_ocp_irq(int irq, void *data)
 {
 	struct wcd_mbhc *mbhc = data;
 
-	pr_debug("%s: received HPHR OCP irq\n", __func__);
+	pr_err("%s: received HPHR OCP irq\n", __func__);
 
 	if (!mbhc) {
 		pr_err("%s: Bad mbhc private data\n", __func__);

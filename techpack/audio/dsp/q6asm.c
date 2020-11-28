@@ -1565,6 +1565,15 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 		pr_err("%s: buffer already allocated\n", __func__);
 		return 0;
 	}
+
+	#ifdef VENDOR_EDIT
+	/* Zhaoan.Xu@PSW.MM.AudioDriver.Platform.1569079, 2018/09/21, Add for fix STS test phone crash*/
+	if (bufcnt == 0) {
+		pr_err("%s: invalid buffer count\n", __func__);
+		return -EINVAL;
+	}
+	#endif /* VENDOR_EDIT */
+
 	mutex_lock(&ac->cmd_lock);
 	buf = kzalloc(((sizeof(struct audio_buffer))*bufcnt),
 			GFP_KERNEL);

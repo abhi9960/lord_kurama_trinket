@@ -861,7 +861,9 @@ static int bolero_probe(struct platform_device *pdev)
 	u32 num_macros = 0;
 	int ret;
 	u32 slew_reg1 = 0, slew_reg2 = 0;
+	//Gong.Chen@ODM_WT.mm.audiodriver.Machine, 2019/06/13, ADD for wcd9370
 	u32 slew_val1 = 0, slew_val2 = 0;
+
 	char __iomem *slew_io_base1 = NULL, *slew_io_base2 = NULL;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(struct bolero_priv),
@@ -911,6 +913,8 @@ static int bolero_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(pdev->dev.of_node, "slew_rate_reg1",
 				   &slew_reg1);
 
+	//ifdef ODM_WT_EDIT
+	//Gong.Chen@ODM_WT.mm.audiodriver.Machine, 2019/06/13, Modify for wcd9370
 	ret |= of_property_read_u32(pdev->dev.of_node, "slew_rate_val1",
 				   &slew_val1);
 	if (!ret) {
@@ -939,6 +943,7 @@ static int bolero_probe(struct platform_device *pdev)
 		/* update slew rate for tx/rx swr interface */
 		iowrite32(slew_val2, slew_io_base2);
 	}
+	//endif ODM_WT_EDIT
 	INIT_WORK(&priv->bolero_add_child_devices_work,
 		  bolero_add_child_devices);
 	schedule_work(&priv->bolero_add_child_devices_work);
