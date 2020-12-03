@@ -48,6 +48,10 @@
 #include <acpi/ghes.h>
 #include <soc/qcom/scm.h>
 #include <trace/events/exception.h>
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#include <wt_sys/wt_boot_reason.h>
+#endif
 
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
@@ -286,7 +290,12 @@ static void __do_kernel_fault(unsigned long addr, unsigned int esr,
 
 	pr_alert("Unable to handle kernel %s at virtual address %08lx\n", msg,
 		 addr);
-
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+	save_panic_key_log("Unable to handle kernel %s at virtual address %08lx\n", msg, addr);
+#endif
+#endif
 	mem_abort_decode(esr);
 
 	show_pte(addr);

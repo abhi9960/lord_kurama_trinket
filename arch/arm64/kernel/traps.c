@@ -50,6 +50,10 @@
 #include <asm/system_misc.h>
 #include <asm/sysreg.h>
 #include <trace/events/exception.h>
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#include <wt_sys/wt_boot_reason.h>
+#endif
 
 static const char *handler[]= {
 	"Synchronous Abort",
@@ -179,7 +183,12 @@ static int __die(const char *str, int err, struct pt_regs *regs)
 	pr_emerg("Process %.*s (pid: %d, stack limit = 0x%p)\n",
 		 TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk),
 		 end_of_stack(tsk));
-
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+	save_panic_key_log("Process %.*s (pid: %d)\n", TASK_COMM_LEN, tsk->comm, task_pid_nr(tsk));
+#endif
+#endif
 	if (!user_mode(regs)) {
 		dump_backtrace(regs, tsk);
 		dump_instr(KERN_EMERG, regs);
@@ -204,6 +213,14 @@ void die(const char *str, struct pt_regs *regs, int err)
 
 	console_verbose();
 	bust_spinlocks(1);
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+	wt_panic_oops = 1;
+	save_panic_key_log(str);
+	save_panic_key_log("\n");
+#endif
+#endif
 	ret = __die(str, err, regs);
 
 	if (regs && kexec_should_crash(current))

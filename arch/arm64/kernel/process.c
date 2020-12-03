@@ -58,6 +58,10 @@
 #include <asm/mmu_context.h>
 #include <asm/processor.h>
 #include <asm/stacktrace.h>
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#include <wt_sys/wt_boot_reason.h>
+#endif
 
 #ifdef CONFIG_CC_STACKPROTECTOR
 #include <linux/stackprotector.h>
@@ -257,6 +261,18 @@ void __show_regs(struct pt_regs *regs)
 	print_symbol("pc : %s\n", regs->pc);
 	print_symbol("lr : %s\n", lr);
 	printk("sp : %016llx pstate : %08llx\n", sp, regs->pstate);
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+	if (wt_panic_oops == 1) {
+		save_panic_key_log_symbol("PC is at %s,", regs->pc);
+		save_panic_key_log(" [<%016llx>] \n", regs->pc);
+		save_panic_key_log_symbol("LR is at %s,", lr);
+		save_panic_key_log(" [<%016llx>] \n", lr);
+		wt_panic_oops = 0;
+	}
+#endif
+#endif
 
 	i = top_reg;
 
