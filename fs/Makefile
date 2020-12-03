@@ -130,3 +130,7 @@ obj-y				+= exofs/ # Multiple modules
 obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
+#ifdef ODM_WT_EDIT
+#Haibin1.Zhang@ODM_WT.BSP.Storage.Sdcard, 2019/05/04, Add exfat fs for Sdcard
+obj-$(CONFIG_EXFAT_FS)		+= exfat/
+#endif

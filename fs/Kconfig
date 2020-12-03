@@ -314,4 +314,9 @@ config FILE_TABLE_DEBUG
 	help
 	  This option enables debug of the open files using a global filetable
 
+#ifdef ODM_WT_EDIT
+#Haibin1.Zhang@ODM_WT.BSP.Storage.Sdcard, 2019/05/04, Add exfat fs for Sdcard
+source "fs/exfat/Kconfig"
+#endif /*VENDOR_EDIT*/
+
 endmenu
