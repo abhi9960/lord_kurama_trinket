@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/mailbox_client.h>
+#include <linux/ipc_logging.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -38,6 +39,13 @@
 #define RPM_RX_FIFO_ID		0x72326170 /* r2ap */
 
 #define to_rpm_pipe(p) container_of(p, struct glink_rpm_pipe, native)
+#define GLINK_LOG_PAGE_CNT 2
+void *rpm_ilc;
+#define GLINK_INFO(ctxt, x, ...)                                          \
+do {                                                                      \
+        if (ctxt)                                                         \
+                ipc_log_string(ctxt, "[%s]: "x, __func__, ##__VA_ARGS__); \
+} while (0)
 
 struct rpm_toc_entry {
 	__le32 id;
@@ -69,6 +77,7 @@ static size_t glink_rpm_rx_avail(struct qcom_glink_pipe *glink_pipe)
 
 	head = readl(pipe->head);
 	tail = readl(pipe->tail);
+	GLINK_INFO(rpm_ilc, "Enter: RX READ:0x%x, WRITE:0x%x\n", readl(pipe->tail), readl(pipe->head));
 
 	if (head < tail)
 		return pipe->native.length - tail + head;
@@ -83,6 +92,7 @@ static void glink_rpm_rx_peak(struct qcom_glink_pipe *glink_pipe,
 	unsigned int tail;
 	size_t len;
 
+	GLINK_INFO(rpm_ilc, "Enter: RX READ:0x%x, WRITE:0x%x\n", readl(pipe->tail), readl(pipe->head));
 	tail = readl(pipe->tail);
 	tail += offset;
 	if (tail >= pipe->native.length)
@@ -106,6 +116,7 @@ static void glink_rpm_rx_advance(struct qcom_glink_pipe *glink_pipe,
 	struct glink_rpm_pipe *pipe = to_rpm_pipe(glink_pipe);
 	unsigned int tail;
 
+	GLINK_INFO(rpm_ilc, "Enter: RX READ:0x%x, WRITE:0x%x\n", readl(pipe->tail), readl(pipe->head));
 	tail = readl(pipe->tail);
 
 	tail += count;
@@ -113,6 +124,7 @@ static void glink_rpm_rx_advance(struct qcom_glink_pipe *glink_pipe,
 		tail -= pipe->native.length;
 
 	writel(tail, pipe->tail);
+	GLINK_INFO(rpm_ilc, "Exit: RX READ:0x%x, WRITE:0x%x\n", readl(pipe->tail), readl(pipe->head));
 }
 
 static size_t glink_rpm_tx_avail(struct qcom_glink_pipe *glink_pipe)
@@ -312,7 +324,7 @@ static int glink_rpm_probe(struct platform_device *pdev)
 					true);
 	if (IS_ERR(glink))
 		return PTR_ERR(glink);
-
+	rpm_ilc = ipc_log_context_create(GLINK_LOG_PAGE_CNT, "rpm_node", 0);
 	platform_set_drvdata(pdev, glink);
 
 	return 0;

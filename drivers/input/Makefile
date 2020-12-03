@@ -31,3 +31,20 @@ obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+#ifdef VENDOR_EDIT
+#Hongyu.lu@BSP.Fingerprint.Secure, 2018/06/22, Add for oppo secure common.
+obj-y += misc/oppo_seccommon_drivers/
+#endif
+#ifdef VENDOR_EDIT
+#Hongyu.lu@BSP.Fingerprint.Basic, 2018/04/25, Add for Fingerprint driver
+obj-$(CONFIG_OPPO_FINGERPRINT)  += oppo_fp_drivers/
+#ifdef ODM_WT_EDIT
+#Bin.Su@ODM_WT.BSP.Boardid,2019/05/07,Add device info for RM begain
+obj-$(CONFIG_ODM_RM)		+= RM/
+#Bin.Su@ODM_WT.BSP.Boardid,2019/05/07,Add device info for RM end
+#endif
+#ifdef ODM_WT_EDIT
+#Bin.Su@ODM_WT.BSP.Boardid,2019/05/07,Add device info for RM begain
+obj-$(CONFIG_ODM_RM)		+= RM/
+#Bin.Su@ODM_WT.BSP.Boardid,2019/05/07,Add device info for RM end
+#endif

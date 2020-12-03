@@ -352,6 +352,8 @@ int qg_write_monotonic_soc(struct qpnp_qg *chip, int msoc)
 	return rc;
 }
 
+#ifndef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190516, Modify for read ADC error */
 int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 {
 	int rc = 0;
@@ -370,6 +372,38 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 
 	return 0;
 }
+#else /* ODM_WT_EDIT*/
+#define TEMP_LOW (-421)
+#define TEMP_HIGH (1080)
+#define RETRY_CNT (3)
+int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
+{
+	int rc = 0;
+	int retry = 0;
+
+#ifndef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190723, Modify for charging */
+	if (chip->battery_missing) {
+		*temp = 250;
+		return 0;
+	}
+#endif /* ODM_WT_EDIT*/
+
+	do {
+		if (retry > 0)
+			pr_info("ADC Error batt_temp = %d\n", *temp);
+		rc = iio_read_channel_processed(chip->batt_therm_chan, temp);
+		if (rc < 0) {
+			pr_err("Failed reading BAT_TEMP over ADC rc=%d\n", rc);
+			return rc;
+		}
+		pr_debug("batt_temp = %d\n", *temp);
+		retry++;
+	} while (((*temp < TEMP_LOW) || (*temp > TEMP_HIGH)) && (retry <= RETRY_CNT));
+
+	return 0;
+}
+#endif /* ODM_WT_EDIT*/
 
 int qg_get_battery_current(struct qpnp_qg *chip, int *ibat_ua)
 {

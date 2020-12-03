@@ -241,6 +241,30 @@ static uint16_t msm_sensor_id_by_mask(struct msm_sensor_ctrl_t *s_ctrl,
 	return sensor_id;
 }
 
+#ifdef ODM_WT_EDIT
+static int at_msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
+{
+	if (msm_sensor_power_down(s_ctrl)< 0) {
+		pr_err("%s:%d error \n", __func__,__LINE__);
+		return -1;
+	}
+	s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
+	return 0;
+}
+static int at_msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
+{
+
+	printk("%s sensor is %s\n", __func__,s_ctrl->sensordata->sensor_name);
+
+	if (msm_sensor_power_up(s_ctrl)< 0) {
+		pr_err("%s:%d error \n", __func__,__LINE__);
+		return -1;
+	}
+	s_ctrl->sensor_state = MSM_SENSOR_POWER_UP;
+	return 0;
+}
+#endif
+
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
@@ -350,6 +374,24 @@ static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 		pr_err("%s s_ctrl NULL\n", __func__);
 		return -EBADF;
 	}
+#ifdef ODM_WT_EDIT
+	if (cmd == 0 && arg == NULL) {
+		rc = at_msm_sensor_power_down(s_ctrl);
+		return rc;
+	}
+	else if (cmd ==1) {
+		rc = at_msm_sensor_power_up(s_ctrl);
+		if(rc<0){
+			pr_err("%s power up err\n", __func__);
+			return rc;
+		}
+		/*add by hongbo.dai@camera 20170325,return sensor name for AT test*/
+		if(argp!=NULL){
+			memcpy((char *)argp,s_ctrl->sensordata->sensor_name,16);
+			}
+		return rc;
+	}
+#endif
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_CFG:
 #ifdef CONFIG_COMPAT

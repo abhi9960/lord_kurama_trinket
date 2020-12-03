@@ -566,7 +566,6 @@ static int pm8008_register_ldo(struct pm8008_regulator *pm8008_reg,
 				pm8008_reg->rdesc.name, rc);
 		return rc;
 	}
-
 	pr_debug("%s regulator registered\n", name);
 
 	return 0;

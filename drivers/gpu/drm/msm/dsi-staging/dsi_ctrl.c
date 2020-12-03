@@ -2535,6 +2535,11 @@ static int _dsi_ctrl_setup_isr(struct dsi_ctrl *dsi_ctrl)
  */
 static void _dsi_ctrl_destroy_isr(struct dsi_ctrl *dsi_ctrl)
 {
+#ifdef ODM_WT_EDIT
+//Hongzhu.Su@ODM_WT.MM.Display.Lcd.1941873, Start 2019/06/14, merge qcom patch to solve crash question concerned
+uint32_t intr_idx = 0;
+//Hongzhu.Su@ODM_WT.MM.Display.Lcd.1941873, End 2019/06/14, merge qcom patch to solve crash question concerned
+#endif /* ODM_WT_EDIT */
 	if (!dsi_ctrl || !dsi_ctrl->pdev || dsi_ctrl->irq_info.irq_num < 0)
 		return;
 
@@ -2542,7 +2547,20 @@ static void _dsi_ctrl_destroy_isr(struct dsi_ctrl *dsi_ctrl)
 		devm_free_irq(&dsi_ctrl->pdev->dev,
 				dsi_ctrl->irq_info.irq_num, dsi_ctrl);
 		dsi_ctrl->irq_info.irq_num = -1;
+#ifdef ODM_WT_EDIT
+//Hongzhu.Su@ODM_WT.MM.Display.Lcd.1941873, Start 2019/06/14, merge qcom patch to solve crash question concerned
+	for (intr_idx = 0; intr_idx < DSI_STATUS_INTERRUPT_COUNT; intr_idx++)
+	{
+		if (dsi_ctrl->irq_info.irq_stat_refcount[intr_idx] != 0)
+		{
+			pr_err("%s: intr_idx = %d, ref_count = %d\n", __func__, intr_idx, dsi_ctrl->irq_info.irq_stat_refcount[intr_idx]);
+			dsi_ctrl->irq_info.irq_stat_refcount[intr_idx] = 0;
+			dsi_ctrl->irq_info.irq_stat_mask = 0;
+		}
 	}
+//Hongzhu.Su@ODM_WT.MM.Display.Lcd.1941873, End 2019/06/14, merge qcom patch to solve crash question concerned
+#endif /* ODM_WT_EDIT */
+		}
 }
 
 void dsi_ctrl_enable_status_interrupt(struct dsi_ctrl *dsi_ctrl,

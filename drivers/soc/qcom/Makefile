@@ -98,3 +98,8 @@ obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
 obj-$(CONFIG_QCOM_AOP_DDR_MESSAGING) += aop_ddr_msgs.o
 obj-$(CONFIG_MSM_HAB) += hab/
 obj-$(CONFIG_QCOM_HYP_CORE_CTL) += hyp_core_ctl.o
+ifeq ($(ODM_WT_EDIT),yes)
+#Hui.Wang@ODM_WT.BSP.Kernel.Security.1941873, 2019/04/22, add for add secboot_fuse_reg & serial_num node in /proc to get fuse status and cpuid
+obj-y += serial_num.o
+obj-y += secboot_fuse.o
+endif

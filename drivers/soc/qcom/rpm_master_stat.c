@@ -93,6 +93,12 @@ struct msm_rpm_master_stats_private_data {
 	struct msm_rpm_master_stats_platform_data *platform_data;
 };
 
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static struct msm_rpm_master_stats_private_data *gPrvdata;
+static bool init_flag = true;
+#endif
+/*VENDOR_EDIT*/
 static int msm_rpm_master_stats_file_close(struct inode *inode,
 		struct file *file)
 {
@@ -106,6 +112,81 @@ static int msm_rpm_master_stats_file_close(struct inode *inode,
 
 	return 0;
 }
+
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+#define COUNTTOS 19200000 //19200000hz
+static void msm_rpm_master_simple_stats(struct msm_rpm_master_stats_private_data *prvdata)
+{
+	struct msm_rpm_master_stats record;
+	struct msm_rpm_master_stats_platform_data *pdata;
+	int master_cnt = prvdata->num_masters;
+	int count, j = 0, i;
+	char *buf;
+	unsigned long active_cores;
+	pdata = prvdata->platform_data;
+	count = 0;
+	buf = prvdata->buf;
+	if(prvdata->platform_data->version == 2)
+		count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "{name(xo_cnt last_enterS last_exitS total_sleepS active_core)}");
+	else
+		count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "{name(xo_cnt shutdown_cnt active_core)}");
+	for(i = 0;i < master_cnt;i++){
+		if (prvdata->platform_data->version == 2) {
+
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "[%s", GET_MASTER_NAME(i, prvdata));
+
+			record.xo_count = readl_relaxed(prvdata->reg_base +
+				(i * pdata->master_offset +offsetof(struct msm_rpm_master_stats,xo_count)));
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "(%d ", record.xo_count);
+
+			record.xo_last_entered_at = readq_relaxed(prvdata->reg_base +(i * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats, xo_last_entered_at)));
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "%lld ", record.xo_last_entered_at/COUNTTOS);
+
+			record.xo_last_exited_at = readq_relaxed(prvdata->reg_base +(i * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats, xo_last_exited_at)));
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "%lld ", record.xo_last_exited_at/COUNTTOS);
+
+			record.xo_accumulated_duration =readq_relaxed(prvdata->reg_base +(i * pdata->master_offset +
+					offsetof(struct msm_rpm_master_stats, xo_accumulated_duration)));
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "%lld ", record.xo_accumulated_duration/COUNTTOS);
+
+			record.active_cores = readl_relaxed(prvdata->reg_base +
+				(i * pdata->master_offset) +offsetof(struct msm_rpm_master_stats, active_cores));
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "%d", record.active_cores);
+		} else {
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "%s", GET_MASTER_NAME(i, prvdata));
+
+
+			record.numshutdowns = readl_relaxed(prvdata->reg_base +(i * pdata->master_offset) + 0x0);
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "(0x%x ", record.numshutdowns);
+
+			record.active_cores = readl_relaxed(prvdata->reg_base +(i * pdata->master_offset) + 0x4);
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, "0x%x", record.active_cores);
+		}
+		active_cores = record.active_cores;
+		j = find_first_bit(&active_cores, BITS_PER_LONG);
+		while (j < BITS_PER_LONG) {
+			count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, ":core%d", j);
+			j = find_next_bit(&active_cores, BITS_PER_LONG, j + 1);
+		}
+		count += snprintf(buf+count, RPM_MASTERS_BUF_LEN-count, ")] ");
+	}
+	if(count >= RPM_MASTERS_BUF_LEN){
+		count = RPM_MASTERS_BUF_LEN;
+		buf[RPM_MASTERS_BUF_LEN-1] = '\0';
+		}
+	pr_info("[RM_POWER]rpm_master: %s\n", buf);
+}
+
+void rpm_master_stats_print(void){
+	if(!init_flag)
+		return;
+	 msm_rpm_master_simple_stats(gPrvdata);
+}
+#endif
+/*VENDOR_EDIT*/
 
 static int msm_rpm_master_copy_stats(
 		struct msm_rpm_master_stats_private_data *prvdata)
@@ -278,6 +359,70 @@ static int msm_rpm_master_copy_stats(
 	master_cnt++;
 	return RPM_MASTERS_BUF_LEN - count;
 }
+#ifdef VENDOR_EDIT
+//Yunqing.Zeng@BSP.Power.Basic 2017/11/13 add for get rpm_stats
+#define MSM_ARCH_TIMER_FREQ 19200000
+static inline u64 get_time_in_msec(u64 counter)
+{
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+	counter *= MSEC_PER_SEC;
+	return counter;
+}
+#endif /* VENDOR_EDIT */
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@BSP.Power.Basic 2017/09/05 add for get rpm_stats
+static int oppo_rpm_master_copy_stats(
+		struct msm_rpm_master_stats_private_data *prvdata)
+{
+	struct msm_rpm_master_stats record;
+	struct msm_rpm_master_stats_platform_data *pdata;
+	static int master_cnt;
+	int count;
+	char *buf;
+
+	/* Iterate possible number of masters */
+	if (master_cnt > prvdata->num_masters - 1) {
+		master_cnt = 0;
+		return 0;
+	}
+
+	pdata = prvdata->platform_data;
+	count = RPM_MASTERS_BUF_LEN;
+	buf = prvdata->buf;
+
+	if (prvdata->platform_data->version == 2) {
+		SNPRINTF(buf, count, "%s:",
+				GET_MASTER_NAME(master_cnt, prvdata));
+		
+		record.xo_count =
+				readl_relaxed(prvdata->reg_base +
+				(master_cnt * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats,
+				xo_count)));
+
+		SNPRINTF(buf, count, "%x", record.xo_count);
+
+		record.xo_accumulated_duration =
+				readq_relaxed(prvdata->reg_base +
+				(master_cnt * pdata->master_offset +
+				offsetof(struct msm_rpm_master_stats,
+				xo_accumulated_duration)));
+
+		SNPRINTF(buf, count, ":%llX\n", get_time_in_msec(record.xo_accumulated_duration));
+	} else {
+		SNPRINTF(buf, count, "%s_shutdown:",
+				GET_MASTER_NAME(master_cnt, prvdata));
+
+		record.numshutdowns = readl_relaxed(prvdata->reg_base +
+				(master_cnt * pdata->master_offset) + 0x0);
+
+		SNPRINTF(buf, count, "%x\n",record.numshutdowns);
+	}
+
+	master_cnt++;
+	return RPM_MASTERS_BUF_LEN - count;
+}
+#endif /* VENDOR_EDIT */
 
 static ssize_t msm_rpm_master_stats_file_read(struct file *file,
 				char __user *bufu, size_t count, loff_t *ppos)
@@ -315,7 +460,79 @@ exit:
 	mutex_unlock(&msm_rpm_master_stats_mutex);
 	return ret;
 }
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@BSP.Power.Basic 2017/09/05 add for get rpm_stats
+static ssize_t oppo_rpm_master_stats_file_read(struct file *file,
+				char __user *bufu, size_t count, loff_t *ppos)
+{
+	struct msm_rpm_master_stats_private_data *prvdata;
+	struct msm_rpm_master_stats_platform_data *pdata;
+	ssize_t ret;
 
+	mutex_lock(&msm_rpm_master_stats_mutex);
+	prvdata = file->private_data;
+	if (!prvdata) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	pdata = prvdata->platform_data;
+	if (!pdata) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (!bufu || count == 0) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (*ppos <= pdata->phys_size) {
+		prvdata->len = oppo_rpm_master_copy_stats(prvdata);
+		*ppos = 0;
+	}
+
+	ret = simple_read_from_buffer(bufu, count, ppos,
+			prvdata->buf, prvdata->len);
+exit:
+	mutex_unlock(&msm_rpm_master_stats_mutex);
+	return ret;
+}
+#endif	/* VENDOR_EDIT */				
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static int private_data_init(struct msm_rpm_master_stats_private_data **prvdata, struct msm_rpm_master_stats_platform_data *pdata){
+
+	int ret = 0;
+
+	mutex_lock(&msm_rpm_master_stats_mutex);
+	(*prvdata) = kzalloc(sizeof(struct msm_rpm_master_stats_private_data), GFP_KERNEL);
+	if (!(*prvdata)) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	(*prvdata)->reg_base = ioremap(pdata->phys_addr_base, pdata->phys_size);
+	if (!(*prvdata)->reg_base) {
+		kfree(*prvdata);
+		(*prvdata) = NULL;
+		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
+			__func__, &pdata->phys_addr_base,
+			pdata->phys_size);
+		ret = -EBUSY;
+		goto exit;
+	}
+
+	(*prvdata)->len = 0;
+	(*prvdata)->num_masters = pdata->num_masters;
+	(*prvdata)->master_names = pdata->masters;
+	(*prvdata)->platform_data = pdata;
+exit:
+	mutex_unlock(&msm_rpm_master_stats_mutex);
+	return ret;
+}
+#endif
+/*VENDOR_EDIT*/
 static int msm_rpm_master_stats_file_open(struct inode *inode,
 		struct file *file)
 {
@@ -365,6 +582,16 @@ static const struct file_operations msm_rpm_master_stats_fops = {
 	.release  = msm_rpm_master_stats_file_close,
 	.llseek   = no_llseek,
 };
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@BSP.Power.Basic 2017/09/05 add for get rpm_stats
+static const struct file_operations oppo_rpm_master_stats_fops = {
+	.owner	  = THIS_MODULE,
+	.open	  = msm_rpm_master_stats_file_open,
+	.read	  = oppo_rpm_master_stats_file_read,
+	.release  = msm_rpm_master_stats_file_close,
+	.llseek   = no_llseek,
+};
+#endif /* VENDOR_EDIT */
 
 static struct msm_rpm_master_stats_platform_data
 			*msm_rpm_master_populate_pdata(struct device *dev)
@@ -462,8 +689,24 @@ static  int msm_rpm_master_stats_probe(struct platform_device *pdev)
 								__func__);
 		return -ENOMEM;
 	}
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@BSP.Power.Basic 2017/09/05 add for get rpm_stats
+	dent = debugfs_create_file("oppo_rpm_master_stats", 0444, NULL,
+					pdata, &oppo_rpm_master_stats_fops);
 
+	if (!dent) {
+		dev_err(&pdev->dev, "%s: oppo_rpm_master_stats debugfs_create_file failed\n",
+								__func__);
+		return -ENOMEM;
+	}
+#endif /* VENDOR_EDIT */
 	platform_set_drvdata(pdev, dent);
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	if(private_data_init(&gPrvdata, pdata))
+		init_flag = false;
+#endif
+/*VENDOR_EDIT*/
 	return 0;
 }
 
@@ -474,6 +717,18 @@ static int msm_rpm_master_stats_remove(struct platform_device *pdev)
 	dent = platform_get_drvdata(pdev);
 	debugfs_remove(dent);
 	platform_set_drvdata(pdev, NULL);
+
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	mutex_lock(&msm_rpm_master_stats_mutex);
+	if (gPrvdata->reg_base)
+		iounmap(gPrvdata->reg_base);
+	kfree(gPrvdata);
+	gPrvdata = NULL;
+	mutex_unlock(&msm_rpm_master_stats_mutex);
+#endif
+/*VENDOR_EDIT*/
+
 	return 0;
 }
 

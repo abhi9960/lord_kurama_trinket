@@ -236,6 +236,10 @@ static inline void msm_pm_qos_add_request(void)
 static void msm_pm_qos_remove_request(void)
 {
 	pr_info("%s: remove request", __func__);
+	#ifdef ODM_WT_EDIT
+	/*Shengqian.Chen@ODM_WT.Camera.HAL, 1372106, 20190724, stability modify for set qos_add_request_done as 0 when call pm_qos_remove_request*/
+	atomic_set(&qos_add_request_done,0);
+	#endif
 	pm_qos_remove_request(&msm_v4l2_pm_qos_request);
 }
 

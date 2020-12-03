@@ -710,7 +710,12 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 		     int pid)
 {
 	struct diag_cmd_reg_t *new_item = NULL;
-
+#ifdef ODM_WT_EDIT
+	//+Changli.Chen@ODM_WT.Conn.Bluetooth.Basic.1372106,2019/04/16 add for fix BT sometimes coupling fail
+	struct diag_cmd_reg_t *temp_item = NULL;
+	struct diag_cmd_reg_entry_t *temp_entry = NULL;
+	//-Changli.Chen@ODM_WT.Conn.Bluetooth.Basic.1372106,2019/04/16 add for fix BT sometimes coupling fail
+#endif
 	if (!new_entry) {
 		pr_err("diag: In %s, invalid new entry\n", __func__);
 		return -EINVAL;
@@ -736,6 +741,22 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 	INIT_LIST_HEAD(&new_item->link);
 
 	mutex_lock(&driver->cmd_reg_mutex);
+#ifdef ODM_WT_EDIT
+	//+Changli.Chen@ODM_WT.Conn.Bluetooth.Basic.1372106,2019/04/16 add for fix BT sometimes coupling fail
+	if(proc > 0) {
+		temp_entry = diag_cmd_search(new_entry, proc);
+		if (temp_entry) {
+			temp_item = container_of(temp_entry, struct diag_cmd_reg_t, entry);
+			if (temp_item) {
+				temp_item->pid = pid;
+				mutex_unlock(&driver->cmd_reg_mutex);
+				kfree(new_item);
+				return 0;
+			}
+		}
+	}
+	//-Changli.Chen@ODM_WT.Conn.Bluetooth.Basic.1372106,2019/04/16 add for fix BT sometimes coupling fail
+#endif
 	list_add_tail(&new_item->link, &driver->cmd_reg_list);
 	driver->cmd_reg_count++;
 	diag_cmd_invalidate_polling(DIAG_CMD_ADD);
@@ -2588,7 +2609,6 @@ long diagchar_compat_ioctl(struct file *filp,
 	struct diag_logging_mode_param_t mode_param;
 	struct diag_con_all_param_t con_param;
 	struct diag_query_pid_t pid_query;
-
 	switch (iocmd) {
 	case DIAG_IOCTL_COMMAND_REG:
 		result = diag_ioctl_cmd_reg_compat(ioarg);
@@ -2747,7 +2767,6 @@ long diagchar_ioctl(struct file *filp,
 	struct diag_logging_mode_param_t mode_param;
 	struct diag_con_all_param_t con_param;
 	struct diag_query_pid_t pid_query;
-
 	switch (iocmd) {
 	case DIAG_IOCTL_COMMAND_REG:
 		result = diag_ioctl_cmd_reg(ioarg);

@@ -22,6 +22,10 @@
 #include <linux/extcon.h>
 #include <linux/usb/class-dual-role.h>
 #include "storm-watch.h"
+#ifdef ODM_WT_EDIT
+#include <linux/usb_notifier.h>
+#endif
+
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -30,6 +34,10 @@ enum print_reason {
 	PR_PARALLEL	= BIT(3),
 	PR_OTG		= BIT(4),
 	PR_WLS		= BIT(5),
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for reduce log */
+	PR_OTHERS	= BIT(6),
+#endif /* ODM_WT_EDIT */
 };
 
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
@@ -77,6 +85,22 @@ enum print_reason {
 #define THERMAL_THROTTLE_VOTER		"THERMAL_THROTTLE_VOTER"
 #define VOUT_VOTER			"VOUT_VOTER"
 #define DR_SWAP_VOTER			"DR_SWAP_VOTER"
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add lcd on-off control usb icl */
+#define FB_BLANK_VOTER			"FB_BLANK_VOTER"
+#define CHG_CHK_VOTER			"CHG_CHK_VOTER"
+#define CHG_STOP_VOTER			"CHG_STOP_VOTER"
+#define CHG_FULL_VOTER			"CHG_FULL_VOTER"
+#define CHG_TIMEOUT_VOTER		"CHG_TIMEOUT_VOTER"
+#define CHG_JEITA_VOTER			"CHG_JEITA_VOTER"
+#define CALL_VOTER				"CALL_VOTER"
+#define SKIN_TEMP_VOTER			"SKIN_TEMP_VOTER"
+#define CPU_TEMP_VOTER			"CPU_TEMP_VOTER"
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190622, Add for usbin-ov delay report */
+#define USBOV_DELAY_VOTER		"USBOV_DELAY_VOTER"
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.2090276, 20190618, Add for start charging after plugin again */
+#define MMI_CHG_VOTER			"MMI_CHG_VOTER"
+#endif /* ODM_WT_EDIT */
 #define USB_SUSPEND_VOTER		"USB_SUSPEND_VOTER"
 #define CHARGER_TYPE_VOTER		"CHARGER_TYPE_VOTER"
 #define HDC_IRQ_VOTER			"HDC_IRQ_VOTER"
@@ -92,8 +116,15 @@ enum print_reason {
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
+#ifndef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Modify CDP current as SDP */
 #define CDP_CURRENT_UA			1500000
 #define DCP_CURRENT_UA			1500000
+#else /* ODM_WT_EDIT */
+#define CDP_CURRENT_UA			500000
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190506, Modify DCP current to 2000mA */
+#define DCP_CURRENT_UA			2000000
+#endif /* ODM_WT_EDIT */
 #define HVDCP_CURRENT_UA		3000000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
@@ -126,6 +157,10 @@ enum {
 	WEAK_ADAPTER_WA			= BIT(2),
 	USBIN_OV_WA			= BIT(3),
 	CHG_TERMINATION_WA		= BIT(4),
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190613, Modify for reduce usbin-ov */
+	USBIN_ADC_WA			= BIT(5),
+#endif /* ODM_WT_EDIT */
 };
 
 enum jeita_cfg_stat {
@@ -352,6 +387,10 @@ struct smb_iio {
 	struct iio_channel	*vph_v_chan;
 	struct iio_channel	*die_temp_chan;
 	struct iio_channel	*skin_temp_chan;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190505, Add for monitor cpu temperature */
+	struct iio_channel	*cpu_temp_chan;
+#endif /* ODM_WT_EDIT */
 	struct iio_channel	*smb_temp_chan;
 };
 
@@ -375,11 +414,19 @@ struct smb_charger {
 	struct mutex		smb_lock;
 	struct mutex		ps_change_lock;
 	struct mutex		dr_lock;
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190613, Modify for reduce usbin-ov */
+	struct mutex		adc_lock;
+#endif /* ODM_WT_EDIT */
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
 	struct power_supply		*usb_psy;
 	struct power_supply		*dc_psy;
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for Quickboot AC online */
+	struct power_supply		*ac_psy;
+#endif /* ODM_WT_EDIT */
 	struct power_supply		*bms_psy;
 	struct power_supply		*usb_main_psy;
 	struct power_supply		*usb_port_psy;
@@ -438,6 +485,23 @@ struct smb_charger {
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190622, Add for usbin-ov delay report */
+	struct delayed_work	usbov_delay_work;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger log */
+#ifdef __WT_BATTERY_CHARGER_LOG_OUTPUT__
+	struct delayed_work	log_output_work;
+	struct class 		log_output_class;
+#endif
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add lcd on-off control usb icl */
+	struct notifier_block	fb_notif;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger monitor */
+	struct delayed_work	charger_monitor_work;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190521, Add for kernel shutdown when high temperature */
+	struct task_struct *tbatt_pwroff_task;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190516, Add for charged wake lock */
+	struct wakeup_source charge_wake_lock;
+#endif /* ODM_WT_EDIT */
 
 	/* secondary charger config */
 	bool			sec_pl_present;
@@ -462,6 +526,10 @@ struct smb_charger {
 	int			thermal_levels;
 	int			*thermal_mitigation;
 	int			dcp_icl_ua;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190513, Add for temperature test */
+	int			fake_temp;
+#endif /* ODM_WT_EDIT */
 	int			fake_capacity;
 	int			fake_batt_status;
 	bool			step_chg_enabled;
@@ -487,6 +555,12 @@ struct smb_charger {
 	bool			hvdcp_disable;
 	int			hw_max_icl_ua;
 	int			auto_recharge_soc;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for step re-charger vbatt setting */
+	int			auto_recharge_mv;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190730, Add for reduce reading Vbus */
+	int			charger_mv;
+#endif /* ODM_WT_EDIT */
 	enum sink_src_mode	sink_src_mode;
 	enum jeita_cfg_stat	jeita_configured;
 	int			charger_temp_max;
@@ -496,6 +570,10 @@ struct smb_charger {
 	bool			lpd_disabled;
 	enum lpd_reason		lpd_reason;
 	bool			fcc_stepper_enable;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190429, Add for monitor cpu temperature */
+	int			cpu_temp;
+#endif /* ODM_WT_EDIT */
 	int			die_temp;
 	int			smb_temp;
 	int			skin_temp;
@@ -552,6 +630,28 @@ struct smb_charger {
 
 	/* wireless */
 	int			wireless_vout;
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger time */
+	int notify_code;
+	unsigned long charger_times;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for call mode */
+	int call_mode;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for report soc */
+	int ui_soc;
+	int prop_status;
+	unsigned long sleep_tm_sec;
+
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Modify for avoid usb offline when the flash led sharp */
+	bool         usb_online_status;
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190613, Modify for avoid usb status changed when read usbin voltage */
+	bool         dbc_read_usbin_vol;
+#endif /* ODM_WT_EDIT*/
+	#ifdef ODM_WT_EDIT
+	//Haibin1.Zhang@ODM_WT.BSP.Storage.otg, 2019/04/18, Add for otg configuration
+	int			usb_id_gpio;
+	int			usb_id_irq;
+	bool		otg_switch;
+	#endif /* ODM_WT_EDIT */
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -591,6 +691,10 @@ int smblib_vconn_regulator_disable(struct regulator_dev *rdev);
 int smblib_vconn_regulator_is_enabled(struct regulator_dev *rdev);
 
 irqreturn_t default_irq_handler(int irq, void *data);
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for reduce log */
+irqreturn_t default_irq_handler_nolog(int irq, void *data);
+#endif /* ODM_WT_EDIT */
 irqreturn_t chg_state_change_irq_handler(int irq, void *data);
 irqreturn_t batt_temp_changed_irq_handler(int irq, void *data);
 irqreturn_t batt_psy_changed_irq_handler(int irq, void *data);
@@ -631,6 +735,15 @@ int smblib_get_prop_input_current_limited(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_iterm(struct smb_charger *chg,
 				union power_supply_propval *val);
+#ifdef ODM_WT_EDIT
+//Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for factory mode test
+int smblib_get_prop_batt_authenticate(struct smb_charger *chg,
+				     union power_supply_propval *val);
+int smblib_get_prop_batt_fcc(struct smb_charger *chg,
+				     union power_supply_propval *val);
+int smblib_get_prop_batt_cc(struct smb_charger *chg,
+				     union power_supply_propval *val);
+#endif /* ODM_WT_EDIT */
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_batt_capacity(struct smb_charger *chg,
@@ -750,4 +863,30 @@ int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Avoid flash current ripple when flash work */
+int smblib_set_opt_switcher_freq(struct smb_charger *chg, int fsw_khz);
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger log */
+#ifdef __WT_BATTERY_CHARGER_LOG_OUTPUT__
+int init_fg_chg_work(struct smb_charger *chg);
+int deinit_fg_chg_work(struct smb_charger *chg);
+#endif
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger monitor */
+int init_chg_monitor_work(struct smb_charger *chg);
+int deinit_chg_monitor_work(struct smb_charger *chg);
+void wake_chg_monitor_work(struct smb_charger *chg, int ms);
+int get_charger_timeout(struct smb_charger *chg);
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger notify code */
+void update_chg_monitor_statu(struct smb_charger *chg);
+void update_charger_notify_code(struct smb_charger *chg);
+int get_rtc_time(unsigned long *rtc_time);
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for do ICL */
+int do_charger_icl(struct smb_charger *chg);
+void reset_charge_modify_setting(struct smb_charger *chg, int chg_triggle);
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for do ICL later */
+void set_icl_flags(struct smb_charger *chg, int val);
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for report soc */
+int get_battery_status_modify(struct smb_charger *chg);
+int get_chg_battery_healthd(void);
+#endif /* ODM_WT_EDIT */
 #endif /* __SMB5_CHARGER_H */

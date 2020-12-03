@@ -146,6 +146,15 @@ static bool is_scaling_required(struct qpnp_qg *chip)
 		/* USB is present, but not charging */
 		return false;
 
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190703, Add to avoid 100-99-100 soc changed */
+	if ((chip->catch_up_soc < chip->msoc) && input_present &&
+			(chip->charge_status == POWER_SUPPLY_STATUS_CHARGING) &&
+			(chip->msoc == 100) && (chip->msoc - chip->catch_up_soc < 5))
+		/* USB is present & charging, msoc was 100 */
+		return false;
+#endif /* ODM_WT_EDIT */
+
 	return true;
 }
 
@@ -178,6 +187,17 @@ static void update_msoc(struct qpnp_qg *chip)
 {
 	int rc = 0, sdam_soc, batt_temp = 0,  batt_soc_32bit = 0;
 	bool input_present = is_input_present(chip);
+
+#ifdef ODM_WT_EDIT
+	/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for store SOC */
+	/* Maybe use when define linearize_soc */
+	static int skip_soc_catch_up_cnt = 0;
+
+	if (skip_soc_catch_up_cnt < 2) {
+		chip->catch_up_soc = chip->msoc;
+		skip_soc_catch_up_cnt ++;
+	}
+#endif /* ODM_WT_EDIT */
 
 	if (chip->catch_up_soc > chip->msoc) {
 		/* SOC increased */
@@ -251,6 +271,11 @@ static void scale_soc_work(struct work_struct *work)
 	struct qpnp_qg *chip = container_of(work,
 			struct qpnp_qg, scale_soc_work);
 
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for store SOC */
+	dump_all_soc(chip, 0);
+#endif /* ODM_WT_EDIT */
+
 	mutex_lock(&chip->soc_lock);
 
 	if (!is_scaling_required(chip)) {
@@ -296,6 +321,11 @@ static enum alarmtimer_restart
 int qg_scale_soc(struct qpnp_qg *chip, bool force_soc)
 {
 	int rc = 0;
+
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for store SOC */
+	dump_all_soc(chip, force_soc);
+#endif /* ODM_WT_EDIT */
 
 	mutex_lock(&chip->soc_lock);
 

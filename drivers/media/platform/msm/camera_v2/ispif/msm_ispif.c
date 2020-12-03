@@ -1195,6 +1195,7 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 	uint32_t vfe_mask = 0;
 	uint32_t intf_addr;
 
+	trace_printk("RESTART_ISPIF E ispif->ispif_state %d\n", ispif->ispif_state);
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif invalid state %d\n", __func__,
 			ispif->ispif_state);
@@ -1227,6 +1228,10 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 	rc = msm_camera_clk_enable(&ispif->pdev->dev,
 		ispif->clk_info, ispif->clks,
 		ispif->num_clk, 1);
+	for (i = 0; i < ispif->num_clk; i++)
+	{
+		trace_printk("enable clock %s\n", ispif->clk_info[i].clk_name);
+	}
 	if (rc < 0)
 		goto disable_regulator;
 
@@ -1258,10 +1263,14 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		}
 	}
 
-	pr_info("%s: ISPIF reset hw done, Restarting", __func__);
+	trace_printk("%s: ISPIF reset hw done, Restarting ispif->ispif_state %d\n", __func__, ispif->ispif_state);
 	rc = msm_camera_clk_enable(&ispif->pdev->dev,
 		ispif->clk_info, ispif->clks,
 		ispif->num_clk, 0);
+	for (i = 0; i < ispif->num_clk; i++)
+	{
+		trace_printk("disable clock %s\n", ispif->clk_info[i].clk_name);
+	}
 	if (rc < 0)
 		goto disable_regulator;
 
@@ -1313,6 +1322,7 @@ static int msm_ispif_restart_frame_boundary(struct ispif_device *ispif,
 		msm_ispif_enable_intf_cids(ispif, intftype,
 			cid_mask, vfe_intf, 1);
 	}
+	trace_printk("RESTART_ISPIF X=0 ispif->ispif_state %d\n", ispif->ispif_state);
 	return rc;
 
 disable_clk:
@@ -1323,6 +1333,7 @@ disable_regulator:
 	/* Turn OFF regulators */
 	msm_ispif_set_regulators(ispif->vfe_vdd, ispif->vfe_vdd_count, 0);
 end:
+	trace_printk("RESTART_ISPIF X ispif->ispif_state %d\n", ispif->ispif_state);
 	return rc;
 }
 
@@ -1336,6 +1347,7 @@ static int msm_ispif_stop_frame_boundary(struct ispif_device *ispif,
 	enum msm_ispif_vfe_intf vfe_intf;
 	uint32_t stop_flag = 0;
 
+	trace_printk("STOP_ISPIF E ispif->ispif_state %d\n", ispif->ispif_state);
 	if (WARN_ON(!ispif) || WARN_ON(!params))
 		return -EINVAL;
 
@@ -1427,6 +1439,7 @@ static int msm_ispif_stop_frame_boundary(struct ispif_device *ispif,
 				params->entries[i].intftype, cid_right_mask,
 				params->entries[i].vfe_intf, 0);
 	}
+	trace_printk("STOP_ISPIF X ispif->ispif_state %d\n", ispif->ispif_state);
 
 end:
 	return rc;
@@ -1743,6 +1756,7 @@ static int msm_ispif_init(struct ispif_device *ispif,
 		return rc;
 	}
 
+	trace_printk("Enable ispif->irq ispif->ispif_state %d\n", ispif->ispif_state);
 	rc = msm_camera_enable_irq(ispif->irq, 1);
 	if (rc < 0) {
 		pr_err("%s:Error enabling IRQs\n", __func__);
@@ -1794,7 +1808,7 @@ static void msm_ispif_release(struct ispif_device *ispif)
 		pr_err("%s: invalid ispif params", __func__);
 		return;
 	}
-
+	trace_printk("disalbed ispif->irq ispif->ispif_state %d\n", ispif->ispif_state);
 	msm_camera_enable_irq(ispif->irq, 0);
 
 	ispif->ispif_state = ISPIF_POWER_DOWN;
@@ -1810,6 +1824,7 @@ static long msm_ispif_dispatch_cmd(enum ispif_cfg_type_t cmd,
 {
 	long rc = 0;
 
+	trace_printk("cmd recived from userspce %d ispif->ispif_state\n", cmd, ispif->ispif_state);
 	switch (cmd) {
 	case ISPIF_CFG:
 		rc = msm_ispif_config(ispif, params);
@@ -1949,19 +1964,22 @@ static int ispif_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	int rc = 0;
 
 	mutex_lock(&ispif->mutex);
+	trace_printk("ispif_open_node ispif->ispif_state %d E\n", ispif->ispif_state);
 	if (ispif->open_cnt == 0) {
 		/* enable regulator and clocks on first open */
 		rc = msm_ispif_set_regulators(ispif->ispif_vdd,
 					ispif->ispif_vdd_count, 1);
 		if (rc)
 			goto unlock;
-
+		trace_printk("Enable ispif_ahb_clk ispif->ispif_state %d E\n", ispif->ispif_state);
 		rc = msm_ispif_clk_ahb_enable(ispif, 1);
 		if (rc)
 			goto ahb_clk_enable_fail;
+		trace_printk("Enable ispif_ahb_clk rc %d X\n", rc);
 	}
 	/* mem remap is done in init when the clock is on */
 	ispif->open_cnt++;
+	trace_printk("ispif_open_node ispif->ispif_state %d X\n", ispif->ispif_state);
 	mutex_unlock(&ispif->mutex);
 	return rc;
 ahb_clk_enable_fail:
@@ -1982,6 +2000,7 @@ static int ispif_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	}
 
 	mutex_lock(&ispif->mutex);
+	trace_printk("ispif_close_node E ispif->ispif_state %d\n", ispif->ispif_state);
 	if (ispif->open_cnt == 0) {
 		pr_err("%s: Invalid close\n", __func__);
 		rc = -ENODEV;
@@ -1991,12 +2010,14 @@ static int ispif_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	if (ispif->open_cnt == 0) {
 		msm_ispif_release(ispif);
 		/* disable clocks and regulator on last close */
+		trace_printk("disable ISPIF ahb clock and regulators ispif->ispif_state %d\n", ispif->ispif_state);
 		msm_ispif_clk_ahb_enable(ispif, 0);
 		msm_ispif_set_regulators(ispif->ispif_vdd,
 					ispif->ispif_vdd_count, 0);
 	}
 end:
 	mutex_unlock(&ispif->mutex);
+	trace_printk("ispif_close_node X ispif->ispif_state %d\n", ispif->ispif_state);
 	return rc;
 }
 
@@ -2062,6 +2083,7 @@ static int ispif_probe(struct platform_device *pdev)
 		rc = -ENODEV;
 		goto get_irq_fail;
 	}
+	trace_printk("disalbed ispif->irq ispif->ispif_state %d\n", ispif->ispif_state);
 	rc = msm_camera_enable_irq(ispif->irq, 0);
 	if (rc)
 		goto sd_reg_fail;

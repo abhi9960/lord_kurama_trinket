@@ -32,6 +32,7 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+#include <linux/hardware_info.h>
 
 #define PMIC_VER_8941				0x01
 #define PMIC_VERSION_REG			0x0105
@@ -899,8 +900,14 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		return -EINVAL;
 	}
 
+#ifndef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/08, Add for print key code log.
 	pr_debug("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
 		pon_rt_sts);
+#else
+	pr_err("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
+		pon_rt_sts);
+#endif
 	key_status = pon_rt_sts & pon_rt_bit;
 
 	if (pon->kpdpwr_dbc_enable && cfg->pon_type == PON_KPDPWR) {
@@ -1521,6 +1528,12 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon,
 	int rc = 0, i = 0, pmic_wd_bark_irq;
 	struct device_node *cfg_node = NULL;
 	struct qpnp_pon_config *cfg;
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190625, Add for set pshold to hard reset */
+#ifdef WT_FINAL_RELEASE
+	unsigned int val;
+#endif /* WT_FINAL_RELEASE */
+#endif /* ODM_WT_EDIT */
 
 	if (pon->num_pon_config) {
 		pon->pon_cfg = devm_kcalloc(pon->dev, pon->num_pon_config,
@@ -1528,6 +1541,15 @@ static int qpnp_pon_config_init(struct qpnp_pon *pon,
 		if (!pon->pon_cfg)
 			return -ENOMEM;
 	}
+
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190625, Add for set pshold to hard reset */
+#ifdef WT_FINAL_RELEASE
+	qpnp_pon_read(pon, QPNP_PON_PS_HOLD_RST_CTL(pon), &val);
+	pr_info("modify ps_hold reset type from 0x%02X to 0x07!\n", val);
+	qpnp_pon_masked_write(pon, QPNP_PON_PS_HOLD_RST_CTL(pon), 0xFF, 0x07);
+#endif /* WT_FINAL_RELEASE */
+#endif /* ODM_WT_EDIT */
 
 	/* Iterate through the list of pon configs */
 	for_each_available_child_of_node(pon->dev->of_node, cfg_node) {
@@ -2190,6 +2212,138 @@ static int qpnp_pon_parse_dt_power_off_config(struct qpnp_pon *pon)
 	return 0;
 }
 
+#ifdef ODM_WT_EDIT
+//Hui.Wang@ODM_WT.BSP.Kernel.Stability.1919220, 2019/04/25, add for boot mode
+enum {
+	MSM_BOOT_MODE__NORMAL,
+	MSM_BOOT_MODE__FASTBOOT,
+	MSM_BOOT_MODE__RECOVERY,
+	MSM_BOOT_MODE__FACTORY,
+	MSM_BOOT_MODE__RF,
+	MSM_BOOT_MODE__WLAN,
+	MSM_BOOT_MODE__MOS,
+	MSM_BOOT_MODE__CHARGE,
+	MSM_BOOT_MODE__SILENCE,
+	MSM_BOOT_MODE__SAU,
+};
+//Bin.Su@ODM_WT.BSP.Boardid,2019/04/12,Add board id for Litchi begain
+extern char board_id[HARDWARE_MAX_ITEM_LONGTH];
+void probe_board_and_set(void)
+{
+	char* boadrid_start;
+	char boardid_info[HARDWARE_MAX_ITEM_LONGTH];
+	int ftm_mode = 0;
+	char *oppo_ftmmode_start;
+	char ftmmode_info[HARDWARE_MAX_ITEM_LONGTH];
+
+	boadrid_start = strstr(saved_command_line,"board_id=");
+	memset(boardid_info, 0, HARDWARE_MAX_ITEM_LONGTH);
+	if(boadrid_start != NULL)
+	{
+		strncpy(boardid_info, boadrid_start+sizeof("board_id=")-1, 9);//skip the header "board_id="
+	}
+	else
+	{
+		sprintf(boardid_info, "boarid not define!");
+	}
+	strlcpy(board_id, boardid_info, HARDWARE_MAX_ITEM_LONGTH);
+
+	//Hui.Wang@ODM_WT.BSP.Kernel.Stability.1919220, 2019/04/15, add for boot mode
+	oppo_ftmmode_start = strstr(saved_command_line,"oppo_ftm_mode=");
+	if (oppo_ftmmode_start != NULL) {
+		//skip the cdmline header of oppo_ftm_mode
+		oppo_ftmmode_start += strlen("oppo_ftm_mode=");
+
+		if(strncmp(oppo_ftmmode_start, "factory2", strlen("factory2")) == 0){
+			ftm_mode = MSM_BOOT_MODE__FACTORY;
+			pr_err("kernel ftm ok\r\n");
+		}else if(strncmp(oppo_ftmmode_start, "ftmwifi", strlen("ftmwifi")) == 0){
+			ftm_mode = MSM_BOOT_MODE__WLAN;
+		}else if(strncmp(oppo_ftmmode_start, "ftmmos", strlen("ftmmos")) == 0){
+			ftm_mode = MSM_BOOT_MODE__MOS;
+		}else if(strncmp(oppo_ftmmode_start, "ftmrf", strlen("ftmrf")) == 0){
+			ftm_mode = MSM_BOOT_MODE__RF;
+		}else if(strncmp(oppo_ftmmode_start, "ftmrecovery", strlen("ftmrecovery")) == 0){
+			ftm_mode = MSM_BOOT_MODE__RECOVERY;
+		}else if(strncmp(oppo_ftmmode_start, "ftmsilence", strlen("ftmsilence")) == 0){
+			ftm_mode = MSM_BOOT_MODE__SILENCE;
+		}else if(strncmp(oppo_ftmmode_start, "ftmsau", strlen("ftmsau")) == 0){
+			ftm_mode = MSM_BOOT_MODE__SAU;
+		}else{
+			ftm_mode = MSM_BOOT_MODE__NORMAL;
+		}
+	} else {
+		ftm_mode = MSM_BOOT_MODE__NORMAL;
+	}
+
+	sprintf(ftmmode_info, "%d", ftm_mode);
+}
+//Bin.Su@ODM_WT.BSP.Boardid,2019/04/12,Add board id for Litchi end
+void oppoversion_info_set(char *name, char *version);
+static int __init modem_id_set(char *str)
+{
+	oppoversion_info_set("modemType", str);
+	switch (*str){
+		case '1':
+			oppoversion_info_set("operatorName", "Asia");
+			break;
+		case '2':
+			oppoversion_info_set("operatorName", "Global");
+			break;
+		case '3':
+			oppoversion_info_set("operatorName", "Global_NFC");
+			break;
+		case '4':
+			oppoversion_info_set("operatorName", "CN");
+			break;
+		case '5':
+			oppoversion_info_set("operatorName", "Vietnam_4G");
+			break;
+		case '6':
+			oppoversion_info_set("operatorName", "Vietnam_3G");
+			break;
+		default:
+			oppoversion_info_set("operatorName", "unknow");
+	}
+	return 1;
+}
+static int __init hwversion_set(char *str)
+{
+	oppoversion_info_set("pcbVersion", str);
+	return 1;
+}
+
+static int __init board_id_set(char *str)
+{
+	if((strncmp(str,"S86125AA1",strlen("S86125AA1")) == 0) ||
+		(strncmp(str,"S86125BA1",strlen("S86125BA1")) == 0)||
+		(strncmp(str,"S86125CA1",strlen("S86125CA1")) == 0)||
+		(strncmp(str,"S86125DA1",strlen("S86125DA1")) == 0)||
+		(strncmp(str,"S86125EA1",strlen("S86125EA1")) == 0)||
+		(strncmp(str,"S86125FA1",strlen("S86125FA1")) == 0)||
+		(strncmp(str,"S86125GA1",strlen("S86125GA1")) == 0)||
+		(strncmp(str,"S86125JA1",strlen("S86125JA1")) == 0)||
+		(strncmp(str,"S86125HA1",strlen("S86125HA1")) == 0)||
+		(strncmp(str,"S86125YA1",strlen("S86125YA1")) == 0)||
+		(strncmp(str,"S86125ZA1",strlen("S86125ZA1")) == 0))
+		oppoversion_info_set("prjVersion", "19361");
+	else if((strncmp(str,"S86125PB1",strlen("S86125PB1")) == 0)||
+			(strncmp(str,"S86125QB1",strlen("S86125QB1")) == 0)||
+			(strncmp(str,"S86125RB1",strlen("S86125RB1")) == 0)||
+			(strncmp(str,"S86125TB1",strlen("S86125TB1")) == 0)||
+			(strncmp(str,"S86125UB1",strlen("S86125UB1")) == 0)||
+			(strncmp(str,"S86125VB1",strlen("S86125VB1")) == 0)||
+			(strncmp(str,"S86125WB1",strlen("S86125WB1")) == 0))
+			oppoversion_info_set("prjVersion", "19637");
+		else
+			oppoversion_info_set("prjVersion", "00000");//knowstatus
+	return 1;
+}
+__setup("modemId=", modem_id_set);
+__setup("androidboot.hwversion=", hwversion_set);
+__setup("board_id=", board_id_set);
+#endif
+
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2306,7 +2460,9 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		sys_reset_dev = pon;
 
 	qpnp_pon_debugfs_init(pon);
-
+	//Bin.Su@ODM_WT.BSP.Boardid,2019/04/12,Add board id for Litchi begain
+	probe_board_and_set();
+	//Bin.Su@ODM_WT.BSP.Boardid,2019/04/12,Add board id for Litchi end
 	return 0;
 }
 

@@ -41,6 +41,17 @@
 #include "sde_power_handle.h"
 #include "sde_core_perf.h"
 #include "sde_trace.h"
+#ifdef VENDOR_EDIT
+/* Gou shengjun@PSW.MM.Display.Lcd.Stability, 2018-11-21
+ * Add for drm notifier for display connect
+*/
+#include <linux/msm_drm_notify.h>
+#include <linux/notifier.h>
+
+
+
+extern int msm_drm_notifier_call_chain(unsigned long val, void *v);
+#endif
 
 #define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
 #define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
@@ -5744,6 +5755,9 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	if (catalog->ubwc_bw_calc_version)
 		sde_kms_info_add_keyint(info, "ubwc_bw_calc_ver",
 				catalog->ubwc_bw_calc_version);
+	sde_kms_info_add_keyint(info, "use_baselayer_for_stage",
+	catalog->has_base_layer);
+
 
 	msm_property_set_blob(&sde_crtc->property_info, &sde_crtc->blob_info,
 			info->data, SDE_KMS_INFO_DATALEN(info), CRTC_PROP_INFO);

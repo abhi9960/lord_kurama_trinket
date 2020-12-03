@@ -23,11 +23,22 @@
 #include <linux/uaccess.h>
 #include <asm/arch_timer.h>
 
+
+#ifdef VENDOR_EDIT
+// Wenxian.Zhen@PSW.BSP.Power.Basic,, 2018/05/19, add for analysis power consumption
+#include <linux/debugfs.h>
+#endif //VENDOR_EDIT
+
 #define RPM_STATS_NUM_REC	2
 #define MSM_ARCH_TIMER_FREQ	19200000
 
 #define GET_PDATA_OF_ATTR(attr) \
 	(container_of(attr, struct msm_rpmstats_kobj_attr, ka)->pd)
+
+#ifdef VENDOR_EDIT
+// Wenxian.Zhen@PSW.BSP.Power.Basic,, 2018/05/19, add for analysis power consumption
+static DEFINE_MUTEX(rpm_stats_mutex);
+#endif //VENDOR_EDIT
 
 struct msm_rpmstats_record {
 	char name[32];
@@ -62,6 +73,22 @@ struct msm_rpm_stats_data {
 #endif
 
 };
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static struct msm_rpmstats_private_data *gPrvdata;
+static bool init_flag = true;
+static bool force_format = false;
+struct mt_rpmstats_cnt_data {
+	char xo_stat_type[5];
+	u32 pre_xo_count;
+	u32 pre_vddmin_count;
+	u32 xo_same_times;
+	u32 vddmin_same_times;
+};
+static struct mt_rpmstats_cnt_data rpmstats_cnt_data;
+#define RPMSTATS_OVER_CNT_THRES 20
+#endif
+/*VENDOR_EDIT*/
 
 struct msm_rpmstats_kobj_attr {
 	struct kobject *kobj;
@@ -84,6 +111,7 @@ static inline u64 get_time_in_msec(u64 counter)
 	return counter;
 }
 
+
 static inline int msm_rpmstats_append_data_to_buf(char *buf,
 		struct msm_rpm_stats_data *data, int buflength)
 {
@@ -91,7 +119,12 @@ static inline int msm_rpmstats_append_data_to_buf(char *buf,
 	u64 time_in_last_mode;
 	u64 time_since_last_mode;
 	u64 actual_last_sleep;
-
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	u32 pre_count;
+	u32 same_times;
+#endif
+/*VENDOR_EDIT*/
 	stat_type[4] = 0;
 	memcpy(stat_type, &data->stat_type, sizeof(u32));
 
@@ -100,6 +133,39 @@ static inline int msm_rpmstats_append_data_to_buf(char *buf,
 	time_since_last_mode = arch_counter_get_cntvct() - data->last_exited_at;
 	time_since_last_mode = get_time_in_sec(time_since_last_mode);
 	actual_last_sleep = get_time_in_msec(data->accumulated);
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	if(!strcmp(stat_type, rpmstats_cnt_data.xo_stat_type)){
+		if(rpmstats_cnt_data.pre_xo_count == data->count)
+			rpmstats_cnt_data.xo_same_times++;
+		else
+			rpmstats_cnt_data.xo_same_times = 0;
+		pre_count = rpmstats_cnt_data.pre_xo_count;
+		same_times = rpmstats_cnt_data.xo_same_times;
+		rpmstats_cnt_data.pre_xo_count = data->count;
+	}else{
+		if(rpmstats_cnt_data.pre_vddmin_count == data->count)
+			rpmstats_cnt_data.vddmin_same_times++;
+		else
+			rpmstats_cnt_data.vddmin_same_times = 0;
+		pre_count = rpmstats_cnt_data.pre_vddmin_count;
+		same_times = rpmstats_cnt_data.vddmin_same_times;
+		rpmstats_cnt_data.pre_vddmin_count = data->count;
+	}
+
+	if(force_format)
+#if defined(CONFIG_MSM_RPM_SMD)
+		return snprintf(buf, buflength, "%s[%d %d %d %llu %llu %llu %#010x] ",
+			stat_type, data->count, pre_count, same_times, time_in_last_mode,
+			time_since_last_mode, actual_last_sleep, data->client_votes);
+#else
+	return snprintf(buf, buflength, "%s[%d %d %d %llu %llu %llu] ",
+		stat_type, data->count, pre_count, same_times, time_in_last_mode,
+		time_since_last_mode, actual_last_sleep);
+#endif
+	else
+#endif
+/*VENDOR_EDIT*/
 
 #if defined(CONFIG_MSM_RPM_SMD)
 	return snprintf(buf, buflength,
@@ -174,6 +240,152 @@ static inline int msm_rpmstats_copy_stats(
 	return length;
 }
 
+#ifdef VENDOR_EDIT
+// Wenxian.Zhen@PSW.BSP.Power.Basic,, 2018/05/19, add for analysis power consumption
+static inline int oppo_rpmstats_append_data_to_buf(char *buf,
+		struct msm_rpm_stats_data *data, int buflength)
+{
+	char stat_type[5];
+	u64 actual_last_sleep;
+
+	stat_type[4] = 0;
+	memcpy(stat_type, &data->stat_type, sizeof(u32));
+	actual_last_sleep = get_time_in_msec(data->accumulated);
+	//pr_err("%s RPM Mode:%s count:%d\n", __func__, stat_type, data->count);
+
+	return snprintf(buf, buflength,
+		"%s:%x:%llx\n", stat_type, data->count, actual_last_sleep);
+}
+static inline int oppo_msm_rpmstats_copy_stats(
+			struct msm_rpmstats_private_data *prvdata)
+{
+	void __iomem *reg;
+	struct msm_rpm_stats_data data;
+	int i, length;
+
+	reg = prvdata->reg_base;
+
+	for (i = 0, length = 0; i < prvdata->num_records; i++) {
+		data.stat_type = msm_rpmstats_read_long_register(reg, i,
+				offsetof(struct msm_rpm_stats_data,
+					stat_type));
+		data.count = msm_rpmstats_read_long_register(reg, i,
+				offsetof(struct msm_rpm_stats_data, count));
+		data.accumulated = msm_rpmstats_read_quad_register(reg,
+				i, offsetof(struct msm_rpm_stats_data,
+					accumulated));
+
+
+		length += oppo_rpmstats_append_data_to_buf(prvdata->buf + length,
+				&data, sizeof(prvdata->buf) - length);
+		prvdata->read_idx++;
+	}
+
+	return length;
+}
+
+
+static ssize_t oppo_rpmstats_file_read(struct file *file, char __user *bufu,
+				  size_t count, loff_t *ppos)
+{
+	struct msm_rpmstats_private_data *prvdata;
+	ssize_t ret;
+
+	mutex_lock(&rpm_stats_mutex);
+	prvdata = file->private_data;
+
+	if (!prvdata) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	if (!bufu || count == 0) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+/*	if (prvdata->platform_data->version == 1) {
+		if (!prvdata->num_records)
+			prvdata->num_records = readl_relaxed(prvdata->reg_base);
+	}*/
+
+	if ((*ppos >= prvdata->len) &&
+		(prvdata->read_idx < prvdata->num_records)) {
+		//pr_err("%s version:%d\n", __func__, prvdata->platform_data->version);
+
+			prvdata->len = oppo_msm_rpmstats_copy_stats(prvdata);
+			*ppos = 0;
+	} else {
+		//pr_err("%s read_idx:%d, num_records:%d\n", __func__,
+			//prvdata->read_idx, prvdata->num_records);
+	}
+	ret = simple_read_from_buffer(bufu, count, ppos,
+			prvdata->buf, prvdata->len);
+exit:
+	mutex_unlock(&rpm_stats_mutex);
+	return ret;
+}
+
+static int msm_rpmstats_file_open(struct inode *inode, struct file *file)
+{
+	struct msm_rpmstats_private_data *prvdata;
+	struct msm_rpmstats_platform_data *pdata;
+	int ret = 0;
+
+	mutex_lock(&rpm_stats_mutex);
+	pdata = inode->i_private;
+
+	file->private_data =
+		kmalloc(sizeof(struct msm_rpmstats_private_data), GFP_KERNEL);
+
+	if (!file->private_data) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	prvdata = file->private_data;
+
+	prvdata->reg_base = ioremap_nocache(pdata->phys_addr_base,
+					pdata->phys_size);
+	if (!prvdata->reg_base) {
+		kfree(file->private_data);
+		prvdata = NULL;
+		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
+			__func__, &pdata->phys_addr_base,
+			pdata->phys_size);
+		ret = -EBUSY;
+		goto exit;
+	}
+
+	prvdata->read_idx = prvdata->num_records =  prvdata->len = 0;
+	prvdata->platform_data = pdata;
+
+		prvdata->num_records = 2;
+exit:
+	mutex_unlock(&rpm_stats_mutex);
+	return ret;
+}
+
+static int msm_rpmstats_file_close(struct inode *inode, struct file *file)
+{
+	struct msm_rpmstats_private_data *private = file->private_data;
+
+	mutex_lock(&rpm_stats_mutex);
+	if (private->reg_base)
+		iounmap(private->reg_base);
+	kfree(file->private_data);
+	mutex_unlock(&rpm_stats_mutex);
+
+	return 0;
+}
+static const struct file_operations oppo_rpmstats_fops = {
+	.owner	  = THIS_MODULE,
+	.open	  = msm_rpmstats_file_open,
+	.read	  = oppo_rpmstats_file_read,
+	.release  = msm_rpmstats_file_close,
+	.llseek   = no_llseek,
+};
+#endif //VENDOR_EDIT
 static ssize_t rpmstats_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
@@ -240,8 +452,78 @@ fail:
 	return ret;
 }
 
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static bool is_over_xo_thres(void){
+	return rpmstats_cnt_data.xo_same_times > RPMSTATS_OVER_CNT_THRES;
+}
+static bool is_over_vddmin_thres(void){
+	return rpmstats_cnt_data.vddmin_same_times > RPMSTATS_OVER_CNT_THRES;
+}
+bool is_not_in_xo_mode(void){
+	return (is_over_xo_thres() && is_over_vddmin_thres());
+}
+bool is_not_in_vddmin_mode(void){
+	return (is_over_vddmin_thres() && !is_over_xo_thres());
+}
+
+static int private_data_init(struct device *dev, struct msm_rpmstats_private_data **prvdata, struct msm_rpmstats_platform_data *pdata){
+	int ret = 0;
+	(*prvdata) = devm_kmalloc(dev, sizeof(struct msm_rpmstats_private_data), GFP_KERNEL);
+	if (!(*prvdata)) {
+		ret = -ENOMEM;
+		pr_err("private_data_init kmalloc_fail\n");
+		goto exit;
+	}
+
+	(*prvdata)->reg_base = devm_ioremap_nocache(dev, pdata->phys_addr_base, pdata->phys_size);
+	if (!(*prvdata)->reg_base) {
+		pr_err("%s: ERROR could not ioremap start=%pa, len=%u\n",
+			__func__, &pdata->phys_addr_base,
+			pdata->phys_size);
+		ret = -EBUSY;
+		kfree(*prvdata);
+		(*prvdata) = NULL;
+		goto exit;
+	}
+
+	(*prvdata)->read_idx = (*prvdata)->num_records =  (*prvdata)->len = 0;
+	(*prvdata)->platform_data = pdata;
+	(*prvdata)->num_records = pdata->num_records;
+exit:
+	return ret;
+}
+
+static void rpmstats_print_format(struct msm_rpmstats_private_data *prvdata, bool suspend){
+
+	prvdata->read_idx = prvdata->len = 0;
+	if (prvdata->read_idx < prvdata->num_records)
+		prvdata->len = msm_rpmstats_copy_stats(prvdata);
+#if defined(CONFIG_MSM_RPM_SMD)
+	printk(KERN_INFO"[RM_POWER]rpmstats_%s:{mode[cnt pre_cnt same_times in_time(ms) since_time(s) total_sleep(ms) client_vot]} %s}\n",
+		(suspend==true)?"suspend":"resume", prvdata->buf);
+#else
+	printk(KERN_INFO"[RM_POWER]rpmstats_%s:{mode[cnt pre_cnt same_times in_time(ms) since_time(s) total_sleep(ms)]} %s}\n",
+		(suspend==true)?"suspend":"resume", prvdata->buf);
+#endif
+}
+
+void rpmstats_print(bool suspend){
+	if(!init_flag)
+		return;
+	force_format = true;
+	rpmstats_print_format(gPrvdata, suspend);
+	force_format = false;
+}
+#endif
+/*VENDOR_EDIT*/
+
 static int msm_rpmstats_probe(struct platform_device *pdev)
 {
+#ifdef VENDOR_EDIT
+// Wenxian.Zhen@PSW.BSP.Power.Basic,, 2018/05/19, add for analysis power consumption
+    struct dentry *dent = NULL;
+#endif //VENDOR_EDIT
 	struct msm_rpmstats_platform_data *pdata;
 	struct resource *res = NULL, *offset = NULL;
 	u32 offset_addr = 0;
@@ -276,9 +558,29 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 	key = "qcom,num-records";
 	if (of_property_read_u32(pdev->dev.of_node, key, &pdata->num_records))
 		pdata->num_records = RPM_STATS_NUM_REC;
+		
+#ifdef VENDOR_EDIT
+// Wenxian.Zhen@PSW.BSP.Power.Basic,, 2018/05/19, add for analysis power consumption
+		dent = debugfs_create_file("oppo_rpm_stats", S_IRUGO, NULL,
+				pdata, &oppo_rpmstats_fops);
 
+		if (!dent) {
+			pr_err("%s: ERROR oppo_rpm_stats debugfs_create_file	fail\n",
+					__func__);
+			kfree(pdata);
+			return -ENOMEM;
+		}
+
+#endif //VENDOR_EDIT
 	msm_rpmstats_create_sysfs(pdev, pdata);
 
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+        if(private_data_init(&pdev->dev, &gPrvdata, pdata))
+            init_flag = false;
+	strcpy(rpmstats_cnt_data.xo_stat_type, "vlow");
+#endif
+/*VENDOR_EDIT*/
 	return 0;
 }
 

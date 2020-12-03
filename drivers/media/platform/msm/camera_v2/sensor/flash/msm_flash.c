@@ -20,6 +20,14 @@
 #include "msm_camera_dt_util.h"
 #include "msm_cci.h"
 
+#ifdef ODM_WT_EDIT
+/* xuegui.bao@cam.drv 20190415 add for qcom-flash node */
+#include <linux/proc_fs.h>
+#include <linux/time.h>
+#include <linux/rtc.h>
+struct msm_flash_ctrl_t *vendor_flash_ctrl = NULL;
+#endif
+
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 
@@ -1274,6 +1282,139 @@ static long msm_flash_subdev_fops_ioctl(struct file *file,
 	return video_usercopy(file, cmd, arg, msm_flash_subdev_do_ioctl);
 }
 #endif
+
+#ifdef ODM_WT_EDIT
+/* xuegui.bao@cam.drv 20190415 add for qcom-flash node */
+struct regulator *vreg_vendor = NULL;
+volatile static int flash_mode = 0, pre_flash_mode = 0;
+
+bool IsEnable_cam_vio = false;
+
+static ssize_t flash_on_off(void)
+{
+    int rc=0;
+    struct msm_flash_cfg_data_t flash_data;
+    struct timespec ts;
+    struct rtc_time tm;
+
+    memset(&flash_data, 0, sizeof(flash_data));
+
+    getnstimeofday(&ts);
+    rtc_time_to_tm(ts.tv_sec, &tm);
+    pr_info("flash_driver_type %d,flash_mode %d,%d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+        vendor_flash_ctrl->flash_driver_type,
+        flash_mode,
+        tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+        tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+
+	pr_err("flash_mode=%d, pre_flash_mode=%d", flash_mode, pre_flash_mode);
+
+    if(pre_flash_mode == flash_mode)
+        return 0;
+
+    if(pre_flash_mode == 5 && flash_mode == 0){
+        pr_err("camera is opened,not to set flashlight off");
+        return 0;
+    }
+
+    pre_flash_mode = flash_mode;
+
+    pr_err("%s vendor_flash_ctrl %d flash_mode=%d\n",__func__, __LINE__, flash_mode);
+    if (vendor_flash_ctrl->func_tbl == NULL) {
+        pr_err("%s vendor_flash_ctrl %d\n",__func__, __LINE__);
+        vendor_flash_ctrl->func_tbl = &flash_table[2]->func_tbl;
+    }
+    switch (flash_mode)
+    {
+        case 0:
+            flash_data.flash_current[0] = 0;
+            flash_data.flash_current[1] = 0;
+            vendor_flash_ctrl->func_tbl->camera_flash_off(vendor_flash_ctrl, &flash_data);
+            break;
+        case 1:
+            if (vendor_flash_ctrl->flash_num_sources >= 2) {
+                flash_data.flash_current[0] = 64; /*64mA*/
+                flash_data.flash_current[1] = 64; /*64mA*/
+            } else {
+                flash_data.flash_current[0] = 50; /*100mA*/
+                flash_data.flash_current[1] = 50; /*100mA*/
+            }
+            vendor_flash_ctrl->func_tbl->camera_flash_low(vendor_flash_ctrl, &flash_data);
+            break;
+        case 2:
+            flash_data.flash_current[0] = 1000; /*1A*/
+            flash_data.flash_current[1] = 1000; /*1A*/
+            vendor_flash_ctrl->func_tbl->camera_flash_high(vendor_flash_ctrl, &flash_data);
+            break;
+        case 3:
+            flash_data.flash_current[0] = 50; /*50mA*/
+            flash_data.flash_current[1] = 50; /*50mA*/
+            vendor_flash_ctrl->func_tbl->camera_flash_low(vendor_flash_ctrl, &flash_data);
+            break;
+        default:
+            break;
+    }
+    pr_err("%s vendor_flash_ctrl %d flash_data.flash_current0=%d, flash_data.flash_current1=%d\n",
+		__func__, __LINE__, flash_data.flash_current[0], flash_data.flash_current[1]);
+
+    return rc;;
+}
+
+static ssize_t flash_proc_write(struct file *filp, const char __user *buff,
+            size_t len, loff_t *data)
+{
+    char buf[8] = {0};
+    int rc = 0;
+    if (len > 8)
+        len = 8;
+    mutex_lock(vendor_flash_ctrl->flash_mutex);
+    if (copy_from_user(buf, buff, len)) {
+        pr_err("proc write error.\n");
+        return -EFAULT;
+    }
+    flash_mode = simple_strtoul(buf, NULL, 10);
+    rc = flash_on_off();
+    if(rc < 0)
+        pr_err("%s flash write failed %d\n", __func__, __LINE__);
+    mutex_unlock(vendor_flash_ctrl->flash_mutex);
+    return len;
+}
+static ssize_t flash_proc_read(struct file *filp, char __user *buff,
+            size_t len, loff_t *data)
+{
+    char value[2] = {0};
+    snprintf(value, sizeof(value), "%d\n", flash_mode);
+    return simple_read_from_buffer(buff, len, data, value,1);
+}
+
+static const struct file_operations led_fops = {
+    .owner		= THIS_MODULE,
+    .read		= flash_proc_read,
+    .write		= flash_proc_write,
+};
+static int flash_proc_init(struct msm_flash_ctrl_t *flash_ctl)
+{
+    int ret = 0;
+    struct proc_dir_entry *proc_entry;
+
+    proc_entry = proc_create_data( "qcom_flash", 0666, NULL, &led_fops, NULL);
+    if (proc_entry == NULL) {
+        ret = -ENOMEM;
+        pr_err("[%s]: Error! Couldn't create qcom_flash proc entry\n", __func__);
+    }
+
+    vendor_flash_ctrl = flash_ctl;
+
+    if (flash_ctl->flash_driver_type == FLASH_DRIVER_PMIC)
+    {
+        pr_info("flash mode is pmic, not need do init");
+        return 0;
+    }
+
+    return ret;
+}
+#endif
+
 static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
@@ -1345,6 +1486,11 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 
 	if (flash_ctrl->flash_driver_type == FLASH_DRIVER_PMIC)
 		rc = msm_torch_create_classdev(pdev, flash_ctrl);
+
+    #ifdef ODM_WT_EDIT
+    /* xuegui.bao@cam.drv 20190415 add for qcom-flash node */
+    flash_proc_init(flash_ctrl);
+    #endif
 
 	CDBG("probe success\n");
 	return rc;

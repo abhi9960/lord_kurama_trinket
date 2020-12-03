@@ -125,6 +125,12 @@ static int clk_branch_toggle(struct clk_hw *hw, bool en,
 		clk_disable_regmap(hw);
 	}
 
+	/*
+	* Make sure enable/disable request goes through before waiting
+	* for CLK_OFF status to get updated.
+	*/
+	mb();
+
 	return clk_branch_wait(br, en, check_halt);
 }
 
@@ -136,34 +142,36 @@ static int clk_branch_enable(struct clk_hw *hw)
 static int clk_cbcr_set_flags(struct regmap *regmap, unsigned int reg,
 				unsigned long flags)
 {
-	u32 cbcr_val;
-
-	regmap_read(regmap, reg, &cbcr_val);
+	u32 cbcr_val = 0;
+	u32 cbcr_mask;
+	int ret;
 
 	switch (flags) {
 	case CLKFLAG_PERIPH_OFF_SET:
-		cbcr_val |= BIT(12);
+		cbcr_val = cbcr_mask = BIT(12);
 		break;
 	case CLKFLAG_PERIPH_OFF_CLEAR:
-		cbcr_val &= ~BIT(12);
+		cbcr_mask = BIT(12);
 		break;
 	case CLKFLAG_RETAIN_PERIPH:
-		cbcr_val |= BIT(13);
+		cbcr_val = cbcr_mask = BIT(13);
 		break;
 	case CLKFLAG_NORETAIN_PERIPH:
-		cbcr_val &= ~BIT(13);
+		cbcr_mask = BIT(13);
 		break;
 	case CLKFLAG_RETAIN_MEM:
-		cbcr_val |= BIT(14);
+		cbcr_val = cbcr_mask = BIT(14);
 		break;
 	case CLKFLAG_NORETAIN_MEM:
-		cbcr_val &= ~BIT(14);
+		cbcr_mask = BIT(14);
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	regmap_write(regmap, reg, cbcr_val);
+	ret = regmap_update_bits(regmap, reg, cbcr_mask, cbcr_val);
+	if (ret)
+		return ret;
 
 	/* Make sure power is enabled/disabled before returning. */
 	mb();
@@ -257,7 +265,14 @@ static unsigned long clk_branch2_recalc_rate(struct clk_hw *hw,
 
 static int clk_branch2_enable(struct clk_hw *hw)
 {
-	return clk_branch_toggle(hw, true, clk_branch2_check_halt);
+	int ret = 0;
+	ret = clk_branch_toggle(hw, true, clk_branch2_check_halt);
+//yangmingjin@BSP.POWER.Basic 2019/05/27 delete for RM_TAG_POWER_DEBUG
+#ifndef VENDOR_EDIT
+	printk("[%s] clk_branch2_enable is called ret = %d\n",clk_hw_get_name(hw),ret);
+#endif
+/*VENDOR_EDIT*/
+	return ret;
 }
 
 static int clk_branch2_prepare(struct clk_hw *hw)
@@ -295,6 +310,11 @@ static int clk_branch2_prepare(struct clk_hw *hw)
 		}
 	}
 exit:
+//yangmingjin@BSP.POWER.Basic 2019/05/27 delete for RM_TAG_POWER_DEBUG
+#ifndef VENDOR_EDIT
+	printk("[%s] clk_branch2_prepare is called ret = %d\n",clk_hw_get_name(hw),ret);
+#endif
+/*VENDOR_EDIT*/
 	return ret;
 }
 

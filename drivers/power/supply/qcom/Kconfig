@@ -120,4 +120,12 @@ config SMB1390_CHARGE_PUMP_PSY
 	  SMB1390 is a div2 charge pump capable of delivering 6A charge current
 	  with very high efficiency.
 
+# #ifdef ODM_WT_EDIT
+# /* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190703, Add for disable temp protect */
+config DISABLE_TEMP_PROTECT
+	bool "disable temp protect"
+	help
+	  Say Y here to build disable temp protect version.
+# #endif /* ODM_WT_EDIT */
+
 endmenu

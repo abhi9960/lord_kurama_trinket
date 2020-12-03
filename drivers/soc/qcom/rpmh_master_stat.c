@@ -95,12 +95,31 @@ struct msm_rpmh_profile_unit {
 struct rpmh_master_stats_prv_data {
 	struct kobj_attribute ka;
 	struct kobject *kobj;
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+	struct kobj_attribute oppoka;
+	struct kobject *oppokobj;
+#endif /*VENDOR_EDIT*/
 };
 
 static struct msm_rpmh_master_stats apss_master_stats;
 static void __iomem *rpmh_unit_base;
 
 static DEFINE_MUTEX(rpmh_stats_mutex);
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+static DEFINE_MUTEX(oppo_rpmh_stats_mutex);
+#endif /*VENDOR_EDIT*/
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+#define MSM_ARCH_TIMER_FREQ 19200000
+static inline u64 get_time_in_msec(u64 counter)
+{
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+	counter *= MSEC_PER_SEC;
+	return counter;
+}
+#endif /* VENDOR_EDIT */
 
 static ssize_t msm_rpmh_master_stats_print_data(char *prvbuf, ssize_t length,
 				struct msm_rpmh_master_stats *record,
@@ -128,6 +147,18 @@ static ssize_t msm_rpmh_master_stats_print_data(char *prvbuf, ssize_t length,
 			accumulated_duration);
 }
 
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+static ssize_t oppo_rpmh_master_stats_print_data(char *prvbuf, ssize_t length,
+				struct msm_rpmh_master_stats *record,
+				const char *name)
+{
+	return snprintf(prvbuf, length, "%s:%x:%llx\n",
+			name,record->counts,
+			get_time_in_msec(record->accumulated_duration));
+}
+
+#endif /*VENDOR_EDIT*/
 static ssize_t msm_rpmh_master_stats_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
 {
@@ -160,6 +191,40 @@ static ssize_t msm_rpmh_master_stats_show(struct kobject *kobj,
 
 	return length;
 }
+
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+static ssize_t oppo_rpmh_master_stats_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	ssize_t length;
+	int i = 0;
+	unsigned int size = 0;
+	struct msm_rpmh_master_stats *record = NULL;
+
+	/*
+	 * Read SMEM data written by masters
+	 */
+
+	mutex_lock(&oppo_rpmh_stats_mutex);
+
+	for (i = 0, length = 0; i < ARRAY_SIZE(rpmh_masters); i++) {
+		record = (struct msm_rpmh_master_stats *) smem_get_entry(
+					rpmh_masters[i].smem_id, &size,
+					rpmh_masters[i].pid, 0);
+		if (!IS_ERR_OR_NULL(record) && (PAGE_SIZE - length > 0))
+			length += oppo_rpmh_master_stats_print_data(
+					buf + length, PAGE_SIZE - length,
+					record,
+					rpmh_masters[i].master_name);
+	}
+
+	mutex_unlock(&oppo_rpmh_stats_mutex);
+
+	return length;
+}
+
+#endif /*VENDOR_EDIT*/
 
 static inline void msm_rpmh_apss_master_stats_update(
 				struct msm_rpmh_profile_unit *profile_unit)
@@ -243,6 +308,25 @@ static int msm_rpmh_master_stats_probe(struct platform_device *pdev)
 		goto fail_iomap;
 	}
 
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+	prvdata->oppokobj = rpmh_master_stats_kobj;
+
+	sysfs_attr_init(&prvdata->oppoka.attr);
+	prvdata->oppoka.attr.mode = 0444;
+	prvdata->oppoka.attr.name = "oppo_rpmh_master_stats";
+	prvdata->oppoka.show = oppo_rpmh_master_stats_show;
+	prvdata->oppoka.store = NULL;
+
+	ret = sysfs_create_file(prvdata->oppokobj, &prvdata->oppoka.attr);
+	if (ret) {
+		pr_err("sysfs_create_file failed\n");
+        sysfs_remove_file(prvdata->oppokobj, &prvdata->oppoka.attr);
+		kobject_put(prvdata->oppokobj);
+		return ret;
+	}
+#endif /*VENDOR_EDIT*/
+
 	apss_master_stats.version_id = 0x1;
 	platform_set_drvdata(pdev, prvdata);
 	return ret;
@@ -266,6 +350,11 @@ static int msm_rpmh_master_stats_remove(struct platform_device *pdev)
 
 	sysfs_remove_file(prvdata->kobj, &prvdata->ka.attr);
 	kobject_put(prvdata->kobj);
+#ifdef VENDOR_EDIT
+//Ji.Xu@BSP.Power.Basic, 2019/04/01, add for get rpm_stats
+	sysfs_remove_file(prvdata->oppokobj, &prvdata->oppoka.attr);
+	kobject_put(prvdata->oppokobj);
+#endif /*VENDOR_EDIT*/
 	platform_set_drvdata(pdev, NULL);
 	iounmap(rpmh_unit_base);
 	rpmh_unit_base = NULL;

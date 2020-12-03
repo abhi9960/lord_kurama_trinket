@@ -25,6 +25,10 @@
 #include <linux/delay.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/of_address.h>
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#include <wt_sys/wt_boot_reason.h>
+#endif
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -63,7 +67,16 @@ static void scm_disable_sdi(void);
  * There is no API from TZ to re-enable the registers.
  * So the SDI cannot be re-enabled when it already by-passed.
  */
+#ifndef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/04/17, Add for controlled by WT_FINAL_RELEASE
 static int download_mode = 1;
+#else
+#ifdef WT_FINAL_RELEASE
+static int download_mode = 0;
+#else
+static int download_mode = 1;
+#endif /* WT_FINAL_RELEASE */
+#endif /* ODM_WT_EDIT */
 static bool force_warm_reboot;
 
 #ifdef CONFIG_QCOM_DLOAD_MODE
@@ -306,6 +319,12 @@ static void msm_restart_prepare(const char *cmd)
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
 	if (cmd != NULL) {
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+		set_reset_magic(RESET_MAGIC_CMD_REBOOT);
+#endif
+#endif
 		if (!strncmp(cmd, "bootloader", 10)) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_BOOTLOADER);
@@ -340,10 +359,62 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+		#ifndef ODM_WT_EDIT
+		//Hui.Wang@ODM_WT.BSP.Kernel.Stability.1919220, 2019/04/15, add for boot mode
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
+		#else
+		} else if (!strncmp(cmd, "wlan", 4)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_WLAN);
+			__raw_writel(0x77665521, restart_reason);
+		} else if (!strncmp(cmd, "rf", 2)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_RF);
+			__raw_writel(0x77665522, restart_reason);
+		} else if (!strncmp(cmd, "ftm", 3)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_FACTORY);
+			__raw_writel(0x77665523, restart_reason);
+		} else if (!strncmp(cmd, "kernel", 6)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_KERNEL);
+			__raw_writel(0x77665524, restart_reason);
+		} else if (!strncmp(cmd, "modem", 5)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_MODEM);
+			__raw_writel(0x77665525, restart_reason);
+		} else if (!strncmp(cmd, "android", 7)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_ANDROID);
+			__raw_writel(0x77665526, restart_reason);
+		} else if (!strncmp(cmd, "silence", 7)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_SILENCE);
+			__raw_writel(0x77665527, restart_reason);
+		} else if (!strncmp(cmd, "sau", 3)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_SAU);
+			__raw_writel(0x77665528, restart_reason);
+		} else if (!strncmp(cmd, "rtc", 3)){
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_RTC);
+			__raw_writel(0x77665529, restart_reason);
+		} else {
+			qpnp_pon_set_restart_reason(
+					PON_RESTART_REASON_NORMAL);
+			__raw_writel(0x77665501, restart_reason);
+		}
+		#endif /* ODM_WT_EDIT */
 	}
+
+#ifdef ODM_WT_EDIT
+	if (in_panic) {
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		qpnp_pon_set_restart_reason(PON_RESTART_REASON_KERNEL);
+	}
+#endif
 
 	flush_cache_all();
 

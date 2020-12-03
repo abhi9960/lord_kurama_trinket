@@ -49,7 +49,6 @@
 #include <linux/cpuset.h>
 #include <linux/vmpressure.h>
 #include <linux/freezer.h>
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/almk.h>
 #include <linux/show_mem_notifier.h>
@@ -59,6 +58,7 @@
 #else
 #define _ZONE ZONE_NORMAL
 #endif
+
 
 #define CREATE_TRACE_POINTS
 #include "trace/lowmemorykiller.h"
@@ -149,9 +149,11 @@ enum {
 	VMPRESSURE_ADJUST_NORMAL,
 };
 
+
 static int adjust_minadj(short *min_score_adj)
 {
 	int ret = VMPRESSURE_NO_ADJUST;
+
 
 	if (!enable_adaptive_lmk)
 		return 0;
@@ -164,6 +166,14 @@ static int adjust_minadj(short *min_score_adj)
 			ret = VMPRESSURE_ADJUST_NORMAL;
 		*min_score_adj = adj_max_shift;
 	}
+
+
+
+
+
+
+
+
 	atomic_set(&shift_adj, 0);
 
 	return ret;
@@ -184,7 +194,6 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 			global_node_page_state(NR_SHMEM) -
 			total_swapcache_pages();
 		other_free = global_zone_page_state(NR_FREE_PAGES);
-
 		atomic_set(&shift_adj, 1);
 		trace_almk_vmpressure(pressure, other_free, other_file);
 	} else if (pressure >= 90) {
@@ -433,6 +442,8 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
  * The goal is to apply a margin of minfree over all zones, rather than to
  * each zone individually.
  */
+
+
 static int get_minfree_scalefactor(gfp_t gfp_mask)
 {
 	struct zonelist *zonelist = node_zonelist(0, gfp_mask);
@@ -621,6 +632,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 		task_unlock(selected);
 		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
+
 		lowmem_print(1, "Killing '%s' (%d) (tgid %d), adj %hd,\n"
 			"to free %ldkB on behalf of '%s' (%d) because\n"
 			"cache %ldkB is below limit %ldkB for oom score %hd\n"
@@ -629,7 +641,8 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			"Total reserve is %ldkB\n"
 			"Total free pages is %ldkB\n"
 			"Total file cache is %ldkB\n"
-			"GFP mask is 0x%x\n",
+			"GFP mask is 0x%x\n"
+			"Vmalloc use is %8lu kB\n",
 			selected->comm, selected->pid, selected->tgid,
 			selected_oom_score_adj,
 			selected_tasksize * (long)(PAGE_SIZE / 1024),
@@ -644,14 +657,16 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			(long)(PAGE_SIZE / 1024),
 			global_node_page_state(NR_FILE_PAGES) *
 			(long)(PAGE_SIZE / 1024),
-			sc->gfp_mask);
+			sc->gfp_mask,
+			vmalloc_nr_pages());
+
+
 
 		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
 			show_mem(SHOW_MEM_FILTER_NODES, NULL);
 			show_mem_call_notifiers();
 			dump_tasks(NULL, NULL);
 		}
-
 		lowmem_deathpending_timeout = jiffies + HZ;
 		rem += selected_tasksize;
 		rcu_read_unlock();
@@ -678,11 +693,14 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	return rem;
 }
 
+
 static struct shrinker lowmem_shrinker = {
 	.scan_objects = lowmem_scan,
 	.count_objects = lowmem_count,
 	.seeks = DEFAULT_SEEKS * 16
 };
+
+
 
 static int __init lowmem_init(void)
 {

@@ -473,7 +473,7 @@ int pil_do_ramdump(struct pil_desc *desc,
 				MD_SS_ENABLED)) {
 			if (desc->minidump_ss->encryption_status ==
 			    MD_SS_ENCR_DONE) {
-				pr_debug("Dumping Minidump for %s\n",
+				pr_info("Dumping Minidump for %s\n",
 					desc->name);
 				return pil_do_minidump(desc, minidump_dev);
 			}

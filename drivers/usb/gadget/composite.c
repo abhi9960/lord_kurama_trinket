@@ -1749,7 +1749,12 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 					cdev->desc.bcdUSB = cpu_to_le16(0x0320);
 					cdev->desc.bMaxPacketSize0 = 9;
 				} else {
-					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+                                        #ifdef ODM_WT_EDIT
+                                        //Haibin1.Zhang@ODM_WT.BSP.Storage.USB, 2019/07/06, Modify for USB copy performance
+                                        cdev->desc.bcdUSB = cpu_to_le16(0x0200);
+				        #else
+                                        cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+				        #endif
 				}
 			} else {
 				if (gadget->lpm_capable)

@@ -19,6 +19,12 @@
 #include "msm_camera_dt_util.h"
 #include "msm_sensor_driver.h"
 
+#ifdef ODM_WT_EDIT
+/*Danfeng.Zhang@ODM_WT.Camera.Driver.1941873, 20190420, add for
+WT camera driver, save camera module info*/
+#include "linux/hardware_info.h"
+#endif
+
 /* Logging macro */
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
@@ -151,6 +157,26 @@ static int32_t msm_sensor_driver_create_v4l_subdev
 	s_ctrl->msm_sd.sd.entity.function = MSM_CAMERA_SUBDEV_SENSOR;
 	s_ctrl->msm_sd.sd.entity.name = s_ctrl->msm_sd.sd.name;
 	s_ctrl->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x3;
+#ifdef ODM_WT_EDIT
+	s_ctrl->msm_sd.sd.entity.group_id = MSM_CAMERA_SUBDEV_SENSOR;
+	if (s_ctrl->sensordata->sensor_info->position == 0) //back sensor
+	    s_ctrl->msm_sd.sd.entity.revision = 1;
+	else if (s_ctrl->sensordata->sensor_info->position == 1) //sub sensor
+	    s_ctrl->msm_sd.sd.entity.revision = 2;
+	else if (!strcmp(s_ctrl->sensordata->sensor_name, "ov02a1b"))
+	    s_ctrl->msm_sd.sd.entity.revision = 3;
+	else if (!strcmp(s_ctrl->sensordata->sensor_name, "gc2375h"))
+	    s_ctrl->msm_sd.sd.entity.revision = 4;
+	else if (!strcmp(s_ctrl->sensordata->sensor_name, "hi846_sunny"))
+	    s_ctrl->msm_sd.sd.entity.revision = 5;
+	else if (!strcmp(s_ctrl->sensordata->sensor_name, "gc2375h_lianhe"))
+	    s_ctrl->msm_sd.sd.entity.revision = 3;
+	else
+	    s_ctrl->msm_sd.sd.entity.revision = 0;
+	pr_err("sensor_info->position %d, sensor_name %s revision=%d",
+	    s_ctrl->sensordata->sensor_info->position, s_ctrl->sensordata->sensor_name,
+	    s_ctrl->msm_sd.sd.entity.revision);
+#endif /* ODM_WT_EDIT */
 	rc = msm_sd_register(&s_ctrl->msm_sd);
 	if (rc < 0) {
 		pr_err("failed: msm_sd_register rc %d", rc);
@@ -761,6 +787,16 @@ int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_camera_i2c_reg_array     *reg_setting = NULL;
 	struct msm_sensor_id_info_t         *id_info = NULL;
 
+#ifdef ODM_WT_EDIT
+/*Danfeng.Zhang@ODM_WT.Camera.Driver.1941873, 20190420, add for
+WT camera driver, save camera module info*/
+	char sensor_hardware_info[128] = {0};
+	/*Danfeng.Zhang@ODM_WT.Camera.driver, 1372106, 20180508, Add for
+	WT camera driver,set different voltage for camera sensor*/
+	int32_t				i = 0;
+	struct camera_vreg_t *cam_vreg = NULL;
+#endif /*ODM_WT_EDIT*/
+
 	/* Validate input parameters */
 	if (!setting) {
 		pr_err("failed: slave_info %pK", setting);
@@ -1064,6 +1100,61 @@ int32_t msm_sensor_driver_probe(void *setting,
 	cci_client->id_map = 0;
 	cci_client->i2c_freq_mode = slave_info->i2c_freq_mode;
 
+#ifdef ODM_WT_EDIT
+	/*Danfeng.Zhang@ODM_WT.Camera.driver, 1372106, 20180508, add for
+	WT camera driver,set different voltage for camera sensor*/
+	cam_vreg = s_ctrl->sensordata->power_info.cam_vreg;
+	if (!(strcmp(slave_info->sensor_name, "s5kgm1_xinli") ) && cam_vreg != NULL) {
+		for (i =0; i< s_ctrl->sensordata->power_info.num_vreg; i++) {
+			CDBG("%s reg_name:%s, max_vol:%d, min_vol:%d",
+				slave_info->sensor_name, cam_vreg[i].reg_name, cam_vreg[i].max_voltage,
+				cam_vreg[i].min_voltage);
+			if (!(strcmp(cam_vreg[i].reg_name, "cam_vana"))) {
+				cam_vreg[i].max_voltage = cam_vreg[i].min_voltage = 2800000;
+				pr_info("%s set cam_vana: max_vol:%d, min_vol:%d",
+					slave_info->sensor_name, cam_vreg[i].max_voltage,
+					cam_vreg[i].min_voltage);
+			}
+		}
+	} else if (!(strcmp(slave_info->sensor_name, "imx386_qtech") ) && cam_vreg != NULL) {
+		for (i =0; i< s_ctrl->sensordata->power_info.num_vreg; i++) {
+			CDBG("%s reg_name:%s, max_vol:%d, min_vol:%d",
+				slave_info->sensor_name, cam_vreg[i].reg_name, cam_vreg[i].max_voltage,
+				cam_vreg[i].min_voltage);
+			if (!(strcmp(cam_vreg[i].reg_name, "cam_vana"))) {
+				cam_vreg[i].max_voltage = cam_vreg[i].min_voltage = 2700000;
+				pr_info("%s set cam_vana: max_vol:%d, min_vol:%d",
+					slave_info->sensor_name, cam_vreg[i].max_voltage,
+					cam_vreg[i].min_voltage);
+			}
+		}
+	} else if (!(strcmp(slave_info->sensor_name, "s5k4h7") ) && cam_vreg != NULL) {
+		for (i =0; i< s_ctrl->sensordata->power_info.num_vreg; i++) {
+			CDBG("%s reg_name:%s, max_vol:%d, min_vol:%d",
+				slave_info->sensor_name, cam_vreg[i].reg_name, cam_vreg[i].max_voltage,
+				cam_vreg[i].min_voltage);
+			if (!(strcmp(cam_vreg[i].reg_name, "cam_vdig"))) {
+				cam_vreg[i].max_voltage = cam_vreg[i].min_voltage = 1100000;
+				pr_info("%s set cam_vdig: max_vol:%d, min_vol:%d",
+					slave_info->sensor_name, cam_vreg[i].max_voltage,
+					cam_vreg[i].min_voltage);
+			}
+		}
+	} else if (!(strcmp(slave_info->sensor_name, "s5k3l6_ofilm") ) && cam_vreg != NULL) {
+		for (i =0; i< s_ctrl->sensordata->power_info.num_vreg; i++) {
+			CDBG("%s reg_name:%s, max_vol:%d, min_vol:%d",
+				slave_info->sensor_name, cam_vreg[i].reg_name, cam_vreg[i].max_voltage,
+				cam_vreg[i].min_voltage);
+			if (!(strcmp(cam_vreg[i].reg_name, "cam_vdig"))) {
+				cam_vreg[i].max_voltage = cam_vreg[i].min_voltage = 1050000;
+				pr_info("%s set cam_vdig: max_vol:%d, min_vol:%d",
+					slave_info->sensor_name, cam_vreg[i].max_voltage,
+					cam_vreg[i].min_voltage);
+			}
+		}
+	}
+#endif /* ODM_WT_EDIT */
+
 	/* Parse and fill vreg params for powerup settings */
 	rc = msm_camera_fill_vreg_params(
 		s_ctrl->sensordata->power_info.cam_vreg,
@@ -1187,6 +1278,43 @@ CSID_TG:
 
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
 
+#ifdef ODM_WT_EDIT
+/*Danfeng.Zhang@ODM_WT.Camera.Driver.1941873, 20190420, add for
+WT camera driver, save camera module info*/
+	if (!strcmp(probed_info->sensor_name, "s5kgm1_xinli")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Xinli");
+		hardwareinfo_set_prop(HARDWARE_BACK_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "s5k3l6_ofilm")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Ofilm");
+		hardwareinfo_set_prop(HARDWARE_FRONT_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "hi846_sunny")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Sunny");
+		hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "ov02a1b")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Holitech");
+		hardwareinfo_set_prop(HARDWARE_BACK_SUB_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "imx386_qtech")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Qtech");
+		hardwareinfo_set_prop(HARDWARE_BACK_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "s5k4h7")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Holitech");
+		hardwareinfo_set_prop(HARDWARE_FRONT_CAM, sensor_hardware_info);
+	} else if (!strcmp(probed_info->sensor_name, "gc2375h")){
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Holitech");
+		hardwareinfo_set_prop(HARDWARE_BACK_MACRO_CAM, sensor_hardware_info);
+	} else {
+		snprintf(sensor_hardware_info, sizeof(sensor_hardware_info), "%s;%s",
+             probed_info->sensor_name, "Union-Image");
+		hardwareinfo_set_prop(HARDWARE_BACK_MACRO_CAM, sensor_hardware_info);
+	}
+#endif /*ODM_WT_EDIT*/
 	/*
 	 * Set probe succeeded flag to 1 so that no other camera shall
 	 * probed on this slot

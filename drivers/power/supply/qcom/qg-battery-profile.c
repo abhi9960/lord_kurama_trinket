@@ -427,6 +427,26 @@ int qg_get_nominal_capacity(u32 *nom_cap_uah, int batt_temp, bool charging)
 	return 0;
 }
 
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for store SOC */
+int lookup_ocv_soc(u32 *ocv_uv, u32 soc, int batt_temp, bool charging)
+{
+	u8 table_index = charging ? TABLE_SOC_OCV1 : TABLE_SOC_OCV2;
+
+	if (!the_battery || !the_battery->profile_node) {
+		pr_err("Battery profile not loaded\n");
+		return -ENODEV;
+	}
+
+	*ocv_uv = interpolate_var(&the_battery->profile[table_index],
+				batt_temp, soc * 100);
+	*ocv_uv = DECIUV_TO_UV(*ocv_uv);
+	*ocv_uv = CAP(QG_MIN_OCV_UV, QG_MAX_OCV_UV, *ocv_uv);
+
+	return 0;
+}
+#endif /* ODM_WT_EDIT */
+
 int qg_batterydata_init(struct device_node *profile_node)
 {
 	int rc = 0;

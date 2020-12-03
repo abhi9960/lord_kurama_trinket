@@ -1,3 +1,9 @@
+#ifdef ODM_WT_EDIT
+#/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for charger log & charger monitor */
+ccflags-y += -D__WT_BATTERY_CHARGER_LOG_OUTPUT__
+obj-y += wt_charger_log.o
+obj-y += charger_monitor.o
+#endif #/* ODM_WT_EDIT */
 obj-$(CONFIG_QPNP_FG_GEN3)     += qpnp-fg-gen3.o fg-memif.o fg-util.o
 obj-$(CONFIG_QPNP_FG_GEN4)     += qpnp-fg-gen4.o fg-memif.o fg-util.o fg-alg.o  pmic-voter.o
 obj-$(CONFIG_QPNP_QG)		+= qpnp-qg.o pmic-voter.o qg-util.o qg-soc.o qg-sdam.o qg-battery-profile.o qg-profile-lib.o fg-alg.o

@@ -27,6 +27,21 @@
 		|| ((left) <= (right) && (left) <= (value) \
 			&& (value) <= (right)))
 
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190416, Add for store SOC */
+#define dump_all_soc(chip, val)	\
+	do { \
+		qg_dbg(chip, QG_DEBUG_DUMP, \
+			"Dump maint_soc=%d msoc=%d catch_up_soc=%d sys_soc=%d sdam_data:[SDAM_SOC=%d]" \
+			" kdata:[QG_SOC=%d QG_BATT_SOC=%d QG_CC_SOC=%d]" \
+			" udata:[QG_SOC=%d QG_BATT_SOC=%d QG_CC_SOC=%d QG_SYS_SOC=%d] func[%s:%d] val:%d\n", \
+				chip->maint_soc, chip->msoc, chip->catch_up_soc, chip->sys_soc, chip->sdam_data[SDAM_SOC], \
+				chip->kdata.param[QG_SOC].data, chip->kdata.param[QG_BATT_SOC].data, chip->kdata.param[QG_CC_SOC].data, \
+				chip->udata.param[QG_SOC].data, chip->udata.param[QG_BATT_SOC].data, chip->udata.param[QG_CC_SOC].data,	chip->udata.param[QG_SYS_SOC].data, \
+				__func__, __LINE__, val); \
+	} while (0)
+#endif
+
 #define UDATA_READY_VOTER		"UDATA_READY_VOTER"
 #define FIFO_DONE_VOTER			"FIFO_DONE_VOTER"
 #define FIFO_RT_DONE_VOTER		"FIFO_RT_DONE_VOTER"

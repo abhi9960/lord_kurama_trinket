@@ -20,6 +20,10 @@
 #include <linux/regulator/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#include <wt_sys/wt_boot_reason.h>
+#endif
 
 #include <linux/msm-bus-board.h>
 #include <linux/msm-bus.h>
@@ -734,9 +738,11 @@ static int pil_shutdown_trusted(struct pil_desc *pil)
 	if (rc)
 		goto err_clks;
 
+
 	rc = scm_call2(SCM_SIP_FNID(SCM_SVC_PIL, PAS_SHUTDOWN_CMD),
 		       &desc);
 	scm_ret = desc.ret[0];
+
 
 	disable_unprepare_clocks(d->proxy_clks, d->proxy_clk_count);
 	disable_regulators(d, d->proxy_regs, d->proxy_reg_count, false);
@@ -797,6 +803,13 @@ static struct pil_reset_ops pil_ops_trusted = {
 	.deinit_image = pil_deinit_image_trusted,
 };
 
+#define subsys_to_drv(d) container_of(d, struct modem_data, subsys_desc)
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+char subsys_restart_reason[WT_MAX_SSR_REASON_LEN];
+#endif
+#endif
 static void log_failure_reason(const struct pil_tz_data *d)
 {
 	size_t size;
@@ -819,6 +832,13 @@ static void log_failure_reason(const struct pil_tz_data *d)
 
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+#ifdef ODM_WT_EDIT
+// Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/05/31, Add for display boot reason
+#ifdef CONFIG_WT_BOOT_REASON
+	strlcpy(subsys_restart_reason, smem_reason, min(size, (size_t)WT_MAX_SSR_REASON_LEN));
+#endif
+#endif
+
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)

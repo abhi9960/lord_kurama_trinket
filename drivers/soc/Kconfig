@@ -17,5 +17,8 @@ source "drivers/soc/ti/Kconfig"
 source "drivers/soc/ux500/Kconfig"
 source "drivers/soc/versatile/Kconfig"
 source "drivers/soc/zte/Kconfig"
+#ifdef VENDOR_EDIT//Fanhong.Kong@ProDrv.CHG,add 2014/10/25 for oppo
+source "drivers/soc/oppo/Kconfig"
+#endif//VENDOR_EDIT
 
 endmenu

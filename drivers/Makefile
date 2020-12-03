@@ -187,4 +187,8 @@ obj-$(CONFIG_FSI)		+= fsi/
 obj-$(CONFIG_TEE)		+= tee/
 obj-$(CONFIG_MULTIPLEXER)	+= mux/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
+#ifdef ODM_WT_EDIT
+# Hui.Wang@ODM_WT.BSP.Kernel.Stability.1941873, 2019/04/20, Add for save bootloader log
+obj-$(CONFIG_WT_SYSTEM)		+= wt_sys/
+#endif
 obj-$(CONFIG_ESOC)              += esoc/

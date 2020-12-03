@@ -1350,11 +1350,18 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_CDP_CHARGER:
 					msm_otg_notify_charger(motg,
 							IDEV_CHG_MAX);
-					msm_otg_start_peripheral(otg->usb_phy,
+#ifdef VENDOR_EDIT
+                    // wenbin.liu@BSP.CHG.Basic, 2016/11/09
+                    // Add for CDP_Port would not stop sm work  BugID 875492
+                                 pm_runtime_get_sync(otg->phy->dev);
+                                 msm_otg_start_peripheral(otg->usb_phy,
 								 1);
-					otg->state
-						= OTG_STATE_B_PERIPHERAL;
-					break;
+                                        otg->phy->state =
+                                            OTG_STATE_B_PERIPHERAL;
+                                        mod_timer(&motg->chg_check_timer,
+                                                CHG_RECHECK_DELAY);
+                                 break;
+#endif /*VENDOR_EDIT*/
 				case USB_SDP_CHARGER:
 					msm_otg_notify_charger(motg, IUNIT);
 					msm_otg_start_peripheral(otg->usb_phy,

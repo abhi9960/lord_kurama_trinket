@@ -1299,6 +1299,12 @@ static void geni_spi_handle_tx(struct spi_geni_master *mas)
 				(mas->cur_word_len / BITS_PER_BYTE) + 1;
 		bytes_to_write = min_t(int, (max_bytes - i), bytes_per_fifo);
 		fifo_byte = (u8 *)&fifo_word;
+	#ifdef VENDOR_EDIT //yixue.ge@bsp.drv modify for debug stack-out-of-bound issue
+		if(bytes_to_write > sizeof(fifo_word)){
+			printk("bytes_to_write = %d\n",bytes_to_write);
+			bytes_to_write = sizeof(fifo_word);
+		}
+	#endif
 		for (j = 0; j < bytes_to_write; j++)
 			fifo_byte[j] = tx_buf[i++];
 		geni_write_reg(fifo_word, mas->base, SE_GENI_TX_FIFOn);
@@ -1356,6 +1362,12 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 		read_bytes = min_t(int, (rx_bytes - i), bytes_per_fifo);
 		fifo_word = geni_read_reg(mas->base, SE_GENI_RX_FIFOn);
 		fifo_byte = (u8 *)&fifo_word;
+	#ifdef VENDOR_EDIT //yixue.ge@bsp.drv modify for debug stack-out-of-bound issue
+		if(read_bytes > sizeof(fifo_word)){
+			printk("read_bytes = %d\n",read_bytes);
+			read_bytes = sizeof(fifo_word);
+		}
+	#endif
 		for (j = 0; j < read_bytes; j++)
 			rx_buf[i++] = fifo_byte[j];
 	}

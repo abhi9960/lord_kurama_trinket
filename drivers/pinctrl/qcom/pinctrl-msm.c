@@ -531,6 +531,21 @@ static int msm_gpio_get(struct gpio_chip *chip, unsigned offset)
 	val = readl(base + g->io_reg);
 	return !!(val & BIT(g->in_bit));
 }
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@Mobile.BSP.CHG 2016-01-19 add for oppo vooc adapter update
+static int msm_gpio_get_oppo_vooc(struct gpio_chip *chip, unsigned offset)
+{
+	const struct msm_pingroup *g;
+	struct msm_pinctrl *pctrl = gpiochip_get_data(chip);
+	u32 val;
+
+	//pr_err("%s enter\n", __func__);
+	g = &pctrl->soc->groups[offset];
+
+	val = readl_oppo_vooc(pctrl->regs + g->io_reg);
+	return !!(val & BIT(g->in_bit));
+}
+#endif /* VENDOR_EDIT */
 
 static void msm_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
@@ -554,9 +569,57 @@ static void msm_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 }
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@Mobile.BSP.CHG 2016-01-19 add for oppo vooc adapter update
+static void msm_gpio_set_oppo_vooc(struct gpio_chip *chip, unsigned offset, int value)
+{
+	const struct msm_pingroup *g;
+	struct msm_pinctrl *pctrl = gpiochip_get_data(chip);
+	u32 val;
 
+	//pr_err("%s enter\n", __func__);
+	g = &pctrl->soc->groups[offset];
+
+	//spin_lock_irqsave(&pctrl->lock, flags);
+
+	val = readl_oppo_vooc(pctrl->regs + g->io_reg);
+	if (value)
+		val |= BIT(g->out_bit);
+	else
+		val &= ~BIT(g->out_bit);
+	writel_oppo_vooc(val, pctrl->regs + g->io_reg);
+
+	//spin_unlock_irqrestore(&pctrl->lock, flags);
+}
+#endif /* VENDOR_EDIT */
 #ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>
+
+#ifdef VENDOR_EDIT
+	static const char * const values[] = {
+		"high",
+		"low"
+	};
+	
+	static const char * const intr_enables[] = {
+		"int_disable",
+		"int_enabe"
+	};
+	
+	static const char * const intr_polaritys[] = {
+		"active-low-",
+		"active-high-"
+	};
+
+	
+	static const char * const intr_detections[] = {
+		"level",
+		"pos_edge",
+		"neg_edge",
+		"dual_edge"
+	};
+	
+#endif
 
 static void msm_gpio_dbg_show_one(struct seq_file *s,
 				  struct pinctrl_dev *pctldev,
@@ -571,6 +634,15 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 	int is_out;
 	int drive;
 	int pull;
+	#ifdef VENDOR_EDIT
+	int in_value;
+	int out_value;
+	int intr_enable;
+	int intr_polarity;
+	int intr_detection;
+	u32 io_reg;
+	u32 intr_cfg_reg;
+	#endif
 	u32 ctl_reg;
 
 	static const char * const pulls[] = {
@@ -589,9 +661,37 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 	drive = (ctl_reg >> g->drv_bit) & 7;
 	pull = (ctl_reg >> g->pull_bit) & 3;
 
+	#ifdef VENDOR_EDIT
+    printk("  g->in_bit = %x,g->on_bit = %x,  g->intr_enable = %d,g->intr_polarity = %d, intr_detection = %d\n",g->in_bit, g->out_bit,g->intr_enable_bit,g->intr_polarity_bit,g->intr_detection_bit);
+	io_reg = readl(base + g->io_reg);
+	intr_cfg_reg = readl(base + g->intr_cfg_reg);
+
+	in_value = !!(io_reg & BIT(g->in_bit));
+	out_value = !!(io_reg & BIT(g->out_bit));
+	intr_enable = (intr_cfg_reg >> g->intr_enable_bit) & 1;
+	intr_polarity = (intr_cfg_reg >> g->intr_polarity_bit) & 1;
+	intr_detection = (intr_cfg_reg >> g->intr_detection_bit) & 3;
+	
+	
+	seq_printf(s, " %-8s: ", g->name);
+	seq_printf(s, " %d  ", func);
+	
+	if(is_out)
+	  	seq_printf(s, "out(%-4s)",values[out_value]);
+	else
+		seq_printf(s, "in (%-4s)",values[in_value]);
+
+	seq_printf(s, " %dmA", msm_regval_to_drive(drive));
+	seq_printf(s, " %-9s", pulls[pull]);
+	seq_printf(s, " %-11s", intr_enables[intr_enable]);
+	seq_printf(s, " %s%s", intr_polaritys[intr_polarity], intr_detections[intr_detection]);	
+#endif
+
+#ifndef VENDOR_EDIT
 	seq_printf(s, " %-8s: %-3s %d", g->name, is_out ? "out" : "in", func);
 	seq_printf(s, " %dmA", msm_regval_to_drive(drive));
 	seq_printf(s, " %s", pulls[pull]);
+#endif
 }
 
 static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
@@ -599,9 +699,29 @@ static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	unsigned gpio = chip->base;
 	unsigned i;
 
+	#ifndef ODM_WT_EDIT
 	for (i = 0; i < chip->ngpio; i++, gpio++) {
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
 		seq_puts(s, "\n");
+	#else
+	//WT000007@ODM_WT.BSP, 2019/05/13, skip gpio as below
+	for (i = 0; i < chip->ngpio; i++, gpio++) {
+		switch (gpio)
+                {
+                  case 0:
+                  case 1:
+                  case 2:
+                  case 3:
+                  case 30:
+                  case 31:
+                  case 32:
+                  case 33:
+                    continue;
+                  default:
+                    msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
+                    seq_puts(s, "\n");
+                }
+	#endif
 	}
 }
 
@@ -614,7 +734,15 @@ static const struct gpio_chip msm_gpio_template = {
 	.direction_output = msm_gpio_direction_output,
 	.get_direction    = msm_gpio_get_direction,
 	.get              = msm_gpio_get,
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@Mobile.BSP.CHG 2016-01-19 add for oppo vooc adapter update
+	.get_oppo_vooc	  = msm_gpio_get_oppo_vooc,
+#endif /* VENDOR_EDIT */
 	.set              = msm_gpio_set,
+#ifdef VENDOR_EDIT
+//Fuchun.Liao@Mobile.BSP.CHG 2016-01-19 add for oppo vooc adapter update
+	.set_oppo_vooc	  = msm_gpio_set_oppo_vooc,
+#endif /* VENDOR_EDIT */
 	.request          = gpiochip_generic_request,
 	.free             = gpiochip_generic_free,
 	.dbg_show         = msm_gpio_dbg_show,

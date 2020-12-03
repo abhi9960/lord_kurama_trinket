@@ -395,6 +395,11 @@ struct mtp_instance {
 /* temporary variable used between mtp_open() and mtp_gadget_bind() */
 static struct mtp_dev *_mtp_dev;
 
+#ifdef VENDOR_EDIT
+//yan.chen@Swdp.shanghai, 2015/11/26, add mtp callback for hp
+static ATOMIC_NOTIFIER_HEAD(mtp_rw_notifier);
+#endif
+
 static inline struct mtp_dev *func_to_mtp(struct usb_function *f)
 {
 	return container_of(f, struct mtp_dev, function);
@@ -1132,6 +1137,10 @@ static long mtp_send_receive_ioctl(struct file *fp, unsigned int code,
 	/* make sure write is done before parameters are read */
 	smp_wmb();
 
+#ifdef VENDOR_EDIT
+//yan.chen@Swdp.shanghai, 2015/12/3, add mtp callback for hypnus
+	atomic_notifier_call_chain(&mtp_rw_notifier, code, (void *)&mfr);
+#endif
 	if (code == MTP_SEND_FILE_WITH_HEADER) {
 		work = &dev->send_file_work;
 		dev->xfer_send_header = 1;
@@ -1156,6 +1165,10 @@ static long mtp_send_receive_ioctl(struct file *fp, unsigned int code,
 	/* read the result */
 	smp_rmb();
 	ret = dev->xfer_result;
+#ifdef VENDOR_EDIT
+//yan.chen@Swdp.shanghai, 2015/12/3, add mtp callback for hypnus
+	atomic_notifier_call_chain(&mtp_rw_notifier, code | 0x8000, (void *)&mfr);
+#endif
 
 fail:
 	spin_lock_irq(&dev->lock);
@@ -1169,6 +1182,20 @@ out:
 	mtp_log("ioctl returning %d\n", ret);
 	return ret;
 }
+#ifdef VENDOR_EDIT
+//yan.chen@Swdp.shanghai, 2015/12/3, add mtp callback for hypnus
+int mtp_register_notifier(struct notifier_block *nb)
+{
+    return atomic_notifier_chain_register(&mtp_rw_notifier, nb);
+}
+EXPORT_SYMBOL(mtp_register_notifier);
+
+int mtp_unregister_notifier(struct notifier_block *nb)
+{
+    return atomic_notifier_chain_unregister(&mtp_rw_notifier, nb);
+}
+EXPORT_SYMBOL(mtp_unregister_notifier);
+#endif /*VENDOR_EDIT*/
 
 static long mtp_ioctl(struct file *fp, unsigned int code, unsigned long value)
 {

@@ -628,12 +628,18 @@ static void msm_isp_update_framedrop_reg(struct msm_vfe_axi_stream *stream_info,
 				MSM_VFE_STREAM_STOP_PERIOD;
 	}
 
+#ifdef VENDOR_EDIT /* Camera@Drv 2019/07/22, Add for frame remap support on frame drop */
+	if (stream_info->undelivered_request_cnt > 0)
+		stream_info->current_framedrop_period =
+			MSM_VFE_STREAM_STOP_PERIOD;
+#else
 	if (stream_info->undelivered_request_cnt > 0 &&
 		drop_reconfig != 1)
 		stream_info->current_framedrop_period =
 			MSM_VFE_STREAM_STOP_PERIOD;
 	if (stream_info->controllable_output && drop_reconfig == 1)
 		stream_info->current_framedrop_period = 1;
+#endif
 	/*
 	 * re-configure the period pattern, only if it's not already
 	 * set to what we want
@@ -1877,10 +1883,12 @@ void msm_isp_halt_send_error(struct vfe_device *vfe_dev, uint32_t event)
 		return;
 
 	if (event == ISP_EVENT_PING_PONG_MISMATCH &&
-		vfe_dev->axi_data.recovery_count < MAX_RECOVERY_THRESHOLD) {
+		vfe_dev->axi_data.recovery_count < MAX_RECOVERY_THRESHOLD){
 		pr_err("%s: ping pong mismatch on vfe%d recovery count %d\n",
 			__func__, vfe_dev->pdev->id,
 			vfe_dev->axi_data.recovery_count);
+		trace_printk("%s: ping pong mismatch on vfe%d recovery count %d\n",
+			__func__, vfe_dev->pdev->id,vfe_dev->axi_data.recovery_count);
 		msm_isp_process_overflow_irq(vfe_dev,
 			&irq_status0, &irq_status1, 1);
 		vfe_dev->axi_data.recovery_count++;
@@ -3745,6 +3753,9 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 		pr_debug("%s:%d invalid time to request frame %d\n",
 			__func__, __LINE__, frame_id);
 		vfe_dev->isp_page->drop_reconfig = 1;
+#ifdef VENDOR_EDIT /* Camera@Drv 2019/07/22, Add for frame remap support on frame drop */
+		return 0;
+#endif
 	} else if ((vfe_dev->axi_data.src_info[frame_src].active) &&
 			((frame_id ==
 			vfe_dev->axi_data.src_info[frame_src].frame_id) ||
@@ -3756,6 +3767,9 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			__func__, vfe_dev->pdev->id, frame_id,
 			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id,
 			vfe_dev->axi_data.src_info[VFE_PIX_0].active);
+#ifdef VENDOR_EDIT /* Camera@Drv 2019/07/22, Add for frame remap support on frame drop */
+		return 0;
+#endif
 	} else if ((vfe_dev->axi_data.src_info[frame_src].active && (frame_id !=
 		vfe_dev->axi_data.src_info[frame_src].frame_id +
 		vfe_dev->axi_data.src_info[frame_src].sof_counter_step)) ||
@@ -3781,6 +3795,10 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			stream_info->activated_framedrop_period,
 			stream_info->stream_id);
 
+#ifdef VENDOR_EDIT /* Camera@Drv 2019/07/22, Add for frame remap support on frame drop */
+		vfe_dev->isp_page->drop_reconfig = 1;
+			return 0;
+#else
 		rc = msm_isp_return_empty_buffer(vfe_dev, stream_info,
 			user_stream_id, frame_id, buf_index, frame_src);
 		if (rc < 0)
@@ -3790,6 +3808,7 @@ static int msm_isp_request_frame(struct vfe_device *vfe_dev,
 			MSM_VFE_STREAM_STOP_PERIOD;
 		msm_isp_cfg_framedrop_reg(stream_info);
 		return 0;
+#endif
 	}
 
 	spin_lock_irqsave(&stream_info->lock, flags);
@@ -4517,6 +4536,8 @@ void msm_isp_process_axi_irq_stream(struct vfe_device *vfe_dev,
 		frame_id_diff = vfe_dev->irq_sof_id - frame_id;
 		if (stream_info->controllable_output && frame_id_diff > 1) {
 			pr_err_ratelimited("%s: scheduling problem do recovery irq_sof_id %d frame_id %d\n",
+				__func__, vfe_dev->irq_sof_id, frame_id);
+			trace_printk("%s: scheduling problem do recovery irq_sof_id %d frame_id %d\n",
 				__func__, vfe_dev->irq_sof_id, frame_id);
 			/* scheduling problem need to do recovery */
 			stream_info->buf[pingpong_bit] = done_buf;
