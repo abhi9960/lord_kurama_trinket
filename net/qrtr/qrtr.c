@@ -20,14 +20,38 @@
 #include <linux/rwsem.h>
 #include <linux/ipc_logging.h>
 #include <linux/uidgid.h>
+#include <linux/pm_wakeup.h>
 
 #include <net/sock.h>
 
 #include "qrtr.h"
 
 #define QRTR_LOG_PAGE_CNT 4
+
+//yangmingjin@BSP.POWER.Basic 2019/05/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static int ipc_router_debug_mask = 0;
+
+void set_ipc_router_debug_mask(int debug_mask){
+	ipc_router_debug_mask = !!debug_mask;
+};
+#endif
+/*VENDOR_EDIT*/
+
+//yangmingjin@BSP.POWER.Basic 2019/05/30 modify for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+#define QRTR_INFO(ctx, x, ...) do { \
+typeof(ctx) _log_ctx = (ctx); \
+if (_log_ctx) \
+	ipc_log_string(_log_ctx, x, ##__VA_ARGS__); \
+if (ipc_router_debug_mask) \
+	printk(KERN_INFO"[RM_POWER_QRTR] "x, ##__VA_ARGS__); \
+} while (0)
+#else
 #define QRTR_INFO(ctx, x, ...)				\
 	ipc_log_string(ctx, x, ##__VA_ARGS__)
+#endif
+/*VENDOR_EDIT*/
 
 #define QRTR_PROTO_VER_1 1
 #define QRTR_PROTO_VER_2 3
@@ -149,6 +173,7 @@ static DEFINE_MUTEX(qrtr_port_lock);
  * @kworker: worker thread for recv work
  * @task: task to run the worker thread
  * @read_data: scheduled work for recv work
+ * @ws: wakeupsource avoid system suspend
  * @ilc: ipc logging context reference
  */
 struct qrtr_node {
@@ -169,6 +194,8 @@ struct qrtr_node {
 	struct kthread_worker kworker;
 	struct task_struct *task;
 	struct kthread_work read_data;
+
+	struct wakeup_source *ws;
 
 	void *ilc;
 };
@@ -193,18 +220,44 @@ static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 			      int type, struct sockaddr_qrtr *from,
 			      struct sockaddr_qrtr *to, unsigned int flags);
-
+//yangmingjin@BSP.POWER.Basic 2019/05/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+static inline void decode_header(unsigned char* buf, uint8_t *cntl_flag, uint16_t *txn_id, uint16_t *msg_id, uint16_t *msg_len)
+{
+	memcpy(cntl_flag, buf, 1);
+	memcpy(txn_id, buf+1, 2);
+	memcpy(msg_id, buf+3, 2);
+	memcpy(msg_len, buf+5, 2);
+}
+#endif/*VENDOR_EDIT*/
 static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			    struct sk_buff *skb)
 {
 	const struct qrtr_ctrl_pkt *pkt;
 	u64 pl_buf = 0;
+//yangmingjin@BSP.POWER.Basic 2019/05/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	uint8_t cntl_flag;
+	uint16_t txn_id, msg_id, msg_len;
+#endif/*VENDOR_EDIT*/
 
 	if (!hdr || !skb || !skb->data)
 		return;
 
 	if (hdr->type == QRTR_TYPE_DATA) {
 		pl_buf = *(u64 *)(skb->data + QRTR_HDR_MAX_SIZE);
+//yangmingjin@BSP.POWER.Basic 2019/05/30 modify for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+		decode_header((char*)(skb->data + QRTR_HDR_MAX_SIZE), &cntl_flag, &txn_id, &msg_id, &msg_len);
+		QRTR_INFO(node->ilc,
+			  "TX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]:[%02x:%04x:%04x:%04x] [%s]\n",
+			  hdr->size, hdr->confirm_rx,
+			  hdr->src_node_id, hdr->src_port_id,
+			  hdr->dst_node_id, hdr->dst_port_id,
+			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
+			  cntl_flag, txn_id, msg_id, msg_len,
+			  current->comm);
+#else
 		QRTR_INFO(node->ilc,
 			  "TX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x] [%s]\n",
 			  hdr->size, hdr->confirm_rx,
@@ -212,6 +265,7 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			  hdr->dst_node_id, hdr->dst_port_id,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
 			  current->comm);
+#endif/*VENDOR_EDIT*/
 	} else {
 		pkt = (struct qrtr_ctrl_pkt *)(skb->data + QRTR_HDR_MAX_SIZE);
 		if (hdr->type == QRTR_TYPE_NEW_SERVER ||
@@ -245,6 +299,11 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 	const struct qrtr_ctrl_pkt *pkt;
 	struct qrtr_cb *cb;
 	u64 pl_buf = 0;
+//yangmingjin@BSP.POWER.Basic 2019/05/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	uint8_t cntl_flag;
+	uint16_t txn_id, msg_id, msg_len;
+#endif/*VENDOR_EDIT*/
 
 	if (!skb || !skb->data)
 		return;
@@ -253,11 +312,22 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 
 	if (cb->type == QRTR_TYPE_DATA) {
 		pl_buf = *(u64 *)(skb->data);
+//yangmingjin@BSP.POWER.Basic 2019/05/30 modify for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+		decode_header((char*)(skb->data), &cntl_flag, &txn_id, &msg_id, &msg_len);
+		QRTR_INFO(node->ilc,
+			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]:[%02x:%04x:%04x:%04x]\n",
+			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
+			  cb->dst_node, cb->dst_port,
+			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
+			  cntl_flag, txn_id, msg_id, msg_len);
+#else
 		QRTR_INFO(node->ilc,
 			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]\n",
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+#endif/*VENDOR_EDIT*/
 	} else {
 		pkt = (struct qrtr_ctrl_pkt *)(skb->data);
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
@@ -346,6 +416,7 @@ static void __qrtr_node_release(struct kref *kref)
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
 
+	wakeup_source_unregister(node->ws);
 	kthread_flush_worker(&node->kworker);
 	kthread_stop(node->task);
 
@@ -609,10 +680,12 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 		node->nid = nid;
 	up_write(&qrtr_node_lock);
 
+	snprintf(name, sizeof(name), "qrtr_%d", nid);
 	if (!node->ilc) {
-		snprintf(name, sizeof(name), "qrtr_%d", nid);
 		node->ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT, name, 0);
 	}
+	if (!node->ws)
+		node->ws = wakeup_source_register(name);
 }
 
 /**
@@ -742,6 +815,8 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	if (cb->dst_port != QRTR_PORT_CTRL && cb->type != QRTR_TYPE_DATA &&
 	    cb->type != QRTR_TYPE_RESUME_TX)
 		goto err;
+
+	__pm_wakeup_event(node->ws, 0);
 
 	if (frag) {
 		skb->data_len = size;

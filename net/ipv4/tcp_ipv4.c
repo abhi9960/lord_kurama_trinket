@@ -1647,6 +1647,14 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	if (!pskb_may_pull(skb, th->doff * 4))
 		goto discard_it;
 
+    #ifdef ODM_WT_EDIT
+    //huan.Yang@ODM_WT.NW.DATA.1372106, 2018/04/22, Add for if the csum invalid, drop the packet.
+    /* Assuming a trustworthy entity did the checksum and found the csum
+    invalid, drop the packet.*/
+    if (skb->ip_summed == CHECKSUM_COMPLETE && skb->csum_valid == 0)
+          goto csum_error;
+    #endif /* ODM_WT_EDIT */
+
 	/* An explanation is required here, I think.
 	 * Packet length and doff are validated by header prediction,
 	 * provided case of th->doff==0 is eliminated.
@@ -2513,6 +2521,13 @@ static int __net_init tcp_sk_init(struct net *net)
 	net->ipv4.sysctl_tcp_sack = 1;
 	net->ipv4.sysctl_tcp_window_scaling = 1;
 	net->ipv4.sysctl_tcp_timestamps = 1;
+
+	#ifdef VENDOR_EDIT
+	//Hao.Peng@PSW.CN.WiFi.Network.login.1854960, 2019/03/30,
+	//add for [BUGID],disable tcp random timestamp,some networks limit tcp syn before login
+	net->ipv4.sysctl_tcp_random_timestamp = 1;
+	#endif /* VENDOR_EDIT */
+
 
 	return 0;
 fail:

@@ -46,7 +46,6 @@
 #define XT_SOCKET_SUPPORTED_HOOKS \
 	((1 << NF_INET_PRE_ROUTING) | (1 << NF_INET_LOCAL_IN))
 
-
 static const char *module_procdirname = "xt_qtaguid";
 static struct proc_dir_entry *xt_qtaguid_procdir;
 
@@ -413,6 +412,14 @@ static struct uid_tag_data *uid_tag_data_tree_search(struct rb_root *root,
 	return NULL;
 }
 
+#ifdef VENDOR_EDIT
+//Zhengding.Chen@BSP.Power.Basic 2019/04/03  add for backup of netstat before sleep
+struct proc_dir_entry * get_xt_qtaguid_procdir(void)
+{
+	return xt_qtaguid_procdir;
+}
+EXPORT_SYMBOL(get_xt_qtaguid_procdir);
+#endif /* VENDOR_EDIT */
 /*
  * Allocates a new uid_tag_data struct if needed.
  * Returns a pointer to the found or allocated uid_tag_data.
@@ -1249,8 +1256,10 @@ static void iface_stat_update_from_skb(const struct sk_buff *skb,
 
 static void tag_stat_update(struct tag_stat *tag_entry,
 			enum ifs_tx_rx direction, int proto, int bytes)
+
 {
 	int active_set;
+
 	active_set = get_active_counter_set(tag_entry->tn.tag);
 	MT_DEBUG("qtaguid: tag_stat_update(tag=0x%llx (uid=%u) set=%d "
 		 "dir=%d proto=%d bytes=%d)\n",
@@ -2983,6 +2992,7 @@ static int __init qtaguid_proc_register(struct proc_dir_entry **res_procdir)
 	 * TODO: add support counter hacking
 	 * xt_qtaguid_stats_file->write_proc = qtaguid_stats_proc_write;
 	 */
+
 	return 0;
 
 no_stats_entry:

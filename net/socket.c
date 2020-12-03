@@ -437,6 +437,7 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 	sock->file = file;
 	file->f_flags = O_RDWR | (flags & O_NONBLOCK);
 	file->private_data = sock;
+
 	return file;
 }
 EXPORT_SYMBOL(sock_alloc_file);
@@ -2096,8 +2097,16 @@ static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,
 	}
 
 out_freectl:
-	if (ctl_buf != ctl)
+	if (ctl_buf != ctl) {
+#ifdef VENDOR_EDIT
+/* ChenYong@Rom.Framework,2019/01/15, add for prevent root check */
+#ifdef CONFIG_OPPO_ROOT_CHECK
+		memset(ctl_buf, 0, ctl_len);
+#endif /* CONFIG_OPPO_ROOT_CHECK */
+#endif /* VENDOR_EDIT */
 		sock_kfree_s(sock->sk, ctl_buf, ctl_len);
+	}
+
 out_freeiov:
 	kfree(iov);
 	return err;
