@@ -128,7 +128,10 @@
 	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
 	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
 
-	cd-gpios = <&tlmm 98 GPIO_ACTIVE_LOW>;
+	//#ifdef ODM_WT_EDIT
+        //Haibin1.Zhang@ODM_WT.BSP.Storage.sdcard, 2019/04/18, Modify for SDcard configuration
+	cd-gpios = <&tlmm 98 GPIO_ACTIVE_HIGH>;
+	//#endif
 
 	status = "ok";
 };
