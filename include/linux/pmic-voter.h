@@ -46,5 +46,9 @@ struct votable *create_votable(const char *name,
 void destroy_votable(struct votable *votable);
 void lock_votable(struct votable *votable);
 void unlock_votable(struct votable *votable);
+#ifdef ODM_WT_EDIT
+/* Bin2.Zhang@ODM_WT.BSP.Charger.Basic.1941873, 20190516, Add for get any voter value without one client */
+bool get_any_voter_value_without_client(struct votable *votable, const char *client_str);
+#endif /* ODM_WT_EDIT */
 
 #endif /* __PMIC_VOTER_H */

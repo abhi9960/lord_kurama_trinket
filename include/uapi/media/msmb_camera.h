@@ -57,7 +57,12 @@
 #define MSM_CAMERA_SUBDEV_EXT          (MSM_CAMERA_SUBDEV_BASE + 19)
 #define MSM_CAMERA_SUBDEV_TOF          (MSM_CAMERA_SUBDEV_BASE + 20)
 #define MSM_CAMERA_SUBDEV_LASER_LED    (MSM_CAMERA_SUBDEV_BASE + 21)
+#ifdef ODM_WT_EDIT
+//Danfeng.Zhang@ODM_WT.Camera.HAL, 1941873, 20190416, modify for by WT, support more sensors
+#define MSM_MAX_CAMERA_SENSORS  8
+#else
 #define MSM_MAX_CAMERA_SENSORS  5
+#endif /*ODM_WT_EDIT*/
 
 /* The below macro is defined to put an upper limit on maximum
  * number of buffer requested per stream. In case of extremely

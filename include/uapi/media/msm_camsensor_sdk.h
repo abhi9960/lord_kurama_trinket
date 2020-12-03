@@ -53,6 +53,7 @@
 #define SENSOR_PROBE_WRITE
 
 #define SECURE_CAMERA
+/*#ifdev VENDOR_EDIT   shubham.makrariya@camera adding camera id 4*/
 
 #define SECURE_CAM_RST_MODULES
 
@@ -61,6 +62,9 @@ enum msm_sensor_camera_id_t {
 	CAMERA_1,
 	CAMERA_2,
 	CAMERA_3,
+	CAMERA_4,
+	CAMERA_5,
+	CAMERA_6,
 	MAX_CAMERAS,
 };
 
