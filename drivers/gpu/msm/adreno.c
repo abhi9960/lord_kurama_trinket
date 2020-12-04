@@ -2295,6 +2295,16 @@ static int adreno_stop(struct kgsl_device *device)
 
 	adreno_clear_pending_transactions(device);
 
+	/*
+	 * The halt is not cleared in the above function if we have GBIF.
+	 * Clear it here if GMU is enabled as GMU stop needs access to
+	 * system memory to stop. For non-GMU targets, we don't need to
+	 * clear it as it will get cleared automatically once headswitch
+	 * goes OFF immediately after adreno_stop.
+	 */
+	if (gmu_core_gpmu_isenabled(device))
+		adreno_deassert_gbif_halt(adreno_dev);
+
 	kgsl_mmu_stop(&device->mmu);
 
 	/*
@@ -3945,6 +3955,9 @@ static void adreno_iommu_sync(struct kgsl_device *device, bool sync)
 	struct scm_desc desc = {0};
 	int ret;
 
+	if (!ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_IOMMU_SYNC))
+		return;
+
 	if (sync == true) {
 		mutex_lock(&kgsl_mmu_sync);
 		desc.args[0] = true;
@@ -3961,7 +3974,8 @@ static void adreno_iommu_sync(struct kgsl_device *device, bool sync)
 	}
 }
 
-static void _regulator_disable(struct kgsl_regulator *regulator)
+static void
+_regulator_disable(struct kgsl_regulator *regulator, unsigned int timeout)
 {
 	unsigned long wait_time;
 
@@ -3970,15 +3984,9 @@ static void _regulator_disable(struct kgsl_regulator *regulator)
 
 	regulator_disable(regulator->reg);
 
-	wait_time = jiffies + msecs_to_jiffies(5000);
+	wait_time = jiffies + msecs_to_jiffies(timeout);
 
-	/*
-	 * Poll for 5secs to ensure that regulator
-	 * is actually OFF. This is needed to make
-	 * sure that next wake-up is indeed a fresh
-	 * start and doesn't fail (especially during
-	 * recovery from fault) because of stale state.
-	 */
+	/* Poll for regulator status to ensure it's OFF */
 	while (!time_after(jiffies, wait_time)) {
 		if (!regulator_is_enabled(regulator->reg))
 			return;
@@ -3988,8 +3996,7 @@ static void _regulator_disable(struct kgsl_regulator *regulator)
 	if (!regulator_is_enabled(regulator->reg))
 		return;
 
-	KGSL_CORE_ERR("regulator '%s' still on after 5000ms\n",
-		regulator->name);
+	KGSL_CORE_ERR("regulator '%s' disable timed out\n", regulator->name);
 }
 
 static void adreno_regulator_disable_poll(struct kgsl_device *device)
@@ -3997,18 +4004,13 @@ static void adreno_regulator_disable_poll(struct kgsl_device *device)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i;
-
-	/* Fast path - hopefully we don't need this quirk */
-	if (!ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_IOMMU_SYNC)) {
-		for (i = KGSL_MAX_REGULATORS - 1; i >= 0; i--)
-			_regulator_disable(&pwr->regulators[i]);
-		return;
-	}
+	unsigned int timeout =
+		ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_IOMMU_SYNC) ? 200 : 5000;
 
 	adreno_iommu_sync(device, true);
 
-	for (i = 0; i < KGSL_MAX_REGULATORS; i++)
-		_regulator_disable(&pwr->regulators[i]);
+	for (i = KGSL_MAX_REGULATORS - 1; i >= 0; i--)
+		_regulator_disable(&pwr->regulators[i], timeout);
 
 	adreno_iommu_sync(device, false);
 }
