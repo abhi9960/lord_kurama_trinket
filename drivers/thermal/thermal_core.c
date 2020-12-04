@@ -476,9 +476,7 @@ static void update_temperature(struct thermal_zone_device *tz)
 static void thermal_zone_device_reset(struct thermal_zone_device *tz)
 {
 	struct thermal_instance *pos;
-
 	tz->temperature = THERMAL_TEMP_INVALID;
-	tz->passive = 0;
 	list_for_each_entry(pos, &tz->thermal_instances, tz_node)
 		pos->initialized = false;
 }
