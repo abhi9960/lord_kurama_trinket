@@ -233,36 +233,6 @@ restart_timer:
 	}
 }
 
-#ifdef WLAN_FEATURE_11W
-/**
- * pe_init_pmf_comeback_timer: init PMF comeback timer
- * @mac_ctx: pointer to global adapter context
- * @session: pe session
- * @session_id: session ID
- *
- * Return: void
- */
-static void pe_init_pmf_comeback_timer(tpAniSirGlobal mac_ctx,
-tpPESession session, uint8_t session_id)
-{
-	QDF_STATUS status;
-
-	session->pmfComebackTimerInfo.pMac = mac_ctx;
-	session->pmfComebackTimerInfo.sessionID = session_id;
-	status = qdf_mc_timer_init(&session->pmfComebackTimer,
-			QDF_TIMER_TYPE_SW, lim_pmf_comeback_timer_callback,
-			(void *)&session->pmfComebackTimerInfo);
-	if (!QDF_IS_STATUS_SUCCESS(status))
-		pe_err("cannot init pmf comeback timer");
-}
-#else
-static inline void
-pe_init_pmf_comeback_timer(tpAniSirGlobal mac_ctx,
-	tpPESession session, uint8_t session_id)
-{
-}
-#endif
-
 #ifdef WLAN_FEATURE_FILS_SK
 /**
  * pe_delete_fils_info: API to delete fils session info
@@ -525,23 +495,10 @@ void lim_update_bcn_probe_filter(tpAniSirGlobal mac_ctx,
 		filter->num_sap_sessions);
 }
 
-/**
- * pe_create_session() creates a new PE session given the BSSID
- * @param pMac:        pointer to global adapter context
- * @param bssid:       BSSID of the new session
- * @param sessionId:   session ID is returned here, if session is created.
- * @param bssType:     station or a
- *
- * This function returns the session context and the session ID if the session
- * corresponding to the passed BSSID is found in the PE session table.
- *
- * Return: tpPESession:   pointer to the session context or NULL if session
- *                        can not be created.
- */
-
 tpPESession
 pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
-		  uint16_t numSta, tSirBssType bssType)
+		  uint16_t numSta, tSirBssType bssType, uint8_t vdev_id,
+		  enum QDF_OPMODE opmode)
 {
 	QDF_STATUS status;
 	uint8_t i;
@@ -607,6 +564,8 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	*sessionId = i;
 	session_ptr->peSessionId = i;
 	session_ptr->bssType = bssType;
+	session_ptr->pePersona = opmode;
+	session_ptr->smeSessionId = vdev_id;
 	session_ptr->gLimPhyMode = WNI_CFG_PHY_MODE_11G;
 	/* Initialize CB mode variables when session is created */
 	session_ptr->htSupportedChannelWidthSet = 0;
@@ -625,8 +584,9 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 	session_ptr->is_session_obss_color_collision_det_enabled =
 		pMac->lim.global_obss_color_collision_det_offload;
 
-	pe_debug("Create a new PE session: %d BSSID: "MAC_ADDRESS_STR" Max No of STA: %d",
-		*sessionId, MAC_ADDR_ARRAY(bssid), numSta);
+	pe_debug("Create PE session: %d opmode %d vdev_id %d  BSSID: "QDF_MAC_ADDR_STR" Max No of STA: %d",
+		 *sessionId, opmode, vdev_id, QDF_MAC_ADDR_ARRAY(bssid),
+		 numSta);
 
 	if (eSIR_INFRA_AP_MODE == bssType || eSIR_IBSS_MODE == bssType) {
 		session_ptr->pSchProbeRspTemplate =
@@ -687,9 +647,11 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 					   (void *)&pMac->lim.gpSession[i]);
 		if (status != QDF_STATUS_SUCCESS)
 			pe_err("cannot create ap_ecsa_timer");
+		qdf_wake_lock_create(&session_ptr->ap_ecsa_wakelock,
+				     "ap_ecsa_wakelock");
+		qdf_runtime_lock_init(&session_ptr->ap_ecsa_runtime_lock);
 	}
 	pe_init_fils_info(session_ptr);
-	pe_init_pmf_comeback_timer(pMac, session_ptr, *sessionId);
 	session_ptr->ht_client_cnt = 0;
 	/* following is invalid value since seq number is 12 bit */
 	session_ptr->prev_auth_seq_num = 0xFFFF;
@@ -837,14 +799,14 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 	TX_TIMER *timer_ptr;
 
 	if (!session || (session && !session->valid)) {
-		pe_err("session is not valid");
+		pe_debug("session already deleted or not valid");
 		return;
 	}
 
-	pe_debug("Trying to delete PE session: %d Opmode: %d BssIdx: %d BSSID: "MAC_ADDRESS_STR,
-		session->peSessionId, session->operMode,
-		session->bssIdx,
-		MAC_ADDR_ARRAY(session->bssId));
+	pe_debug("Delete PE session: %d opmode: %d vdev_id: %d BSSID: "QDF_MAC_ADDR_STR,
+		 session->peSessionId, session->pePersona,
+		 session->smeSessionId,
+		 QDF_MAC_ADDR_ARRAY(session->bssId));
 
 	lim_reset_bcn_probe_filter(mac_ctx, session);
 
@@ -863,6 +825,8 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 	}
 
 	if (LIM_IS_AP_ROLE(session)) {
+		qdf_runtime_lock_deinit(&session->ap_ecsa_runtime_lock);
+		qdf_wake_lock_destroy(&session->ap_ecsa_wakelock);
 		qdf_mc_timer_stop(&session->protection_fields_reset_timer);
 		qdf_mc_timer_destroy(&session->protection_fields_reset_timer);
 		session->dfsIncludeChanSwIe = 0;
@@ -992,12 +956,6 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 		session->addIeParams.probeRespBCNData_buff = NULL;
 		session->addIeParams.probeRespBCNDataLen = 0;
 	}
-#ifdef WLAN_FEATURE_11W
-	if (QDF_TIMER_STATE_RUNNING ==
-	    qdf_mc_timer_get_current_state(&session->pmfComebackTimer))
-		qdf_mc_timer_stop(&session->pmfComebackTimer);
-	qdf_mc_timer_destroy(&session->pmfComebackTimer);
-#endif
 	pe_delete_fils_info(session);
 	session->valid = false;
 
@@ -1049,8 +1007,8 @@ tpPESession pe_find_session_by_peer_sta(tpAniSirGlobal pMac, uint8_t *sa,
 		}
 	}
 
-	pe_debug("Session lookup fails for Peer StaId:");
-	lim_print_mac_addr(pMac, sa, LOGD);
+	pe_debug("Session lookup fails for Peer StaId: %pM", sa);
+
 	return NULL;
 }
 

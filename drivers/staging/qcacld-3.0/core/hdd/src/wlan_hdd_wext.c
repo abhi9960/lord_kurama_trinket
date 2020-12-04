@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018, 2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -2890,7 +2890,7 @@ static int hdd_check_wext_control(enum hdd_wext_control wext_control,
 		hdd_err_rl("Rejecting disabled ioctl %x", info->cmd);
 		return -ENOTSUPP;
 	case hdd_wext_deprecated:
-		hdd_warn_rl("Using deprecated ioctl %x", info->cmd);
+		hdd_nofl_debug("Using deprecated ioctl %x", info->cmd);
 		return 0;
 	case hdd_wext_enabled:
 		return 0;
@@ -3172,9 +3172,7 @@ int hdd_wlan_dump_stats(struct hdd_adapter *adapter, int value)
 		wlan_hdd_display_tx_rx_histogram(hdd_ctx);
 		break;
 	case CDP_HDD_NETIF_OPER_HISTORY:
-		wlan_hdd_display_netif_queue_history
-					(hdd_ctx,
-					 QDF_STATS_VERBOSITY_LEVEL_HIGH);
+		wlan_hdd_display_adapter_netif_queue_history(adapter);
 		break;
 	case CDP_HIF_STATS:
 		hdd_display_hif_stats();
@@ -5798,7 +5796,8 @@ static int __iw_setnone_getint(struct net_device *dev,
 		if (QDF_STATUS_SUCCESS !=
 		    sme_cfg_get_int(mac_handle, WNI_CFG_CURRENT_TX_POWER_LEVEL,
 				    &txpow2g)) {
-			return -EIO;
+			ret = -EIO;
+			break;
 		}
 		hdd_debug("2G tx_power %d", txpow2g);
 		break;
@@ -5815,7 +5814,8 @@ static int __iw_setnone_getint(struct net_device *dev,
 		if (QDF_STATUS_SUCCESS !=
 		    sme_cfg_get_int(mac_handle, WNI_CFG_CURRENT_TX_POWER_LEVEL,
 				    &txpow5g)) {
-			return -EIO;
+			ret = -EIO;
+			break;
 		}
 		hdd_debug("5G tx_power %d", txpow5g);
 		break;

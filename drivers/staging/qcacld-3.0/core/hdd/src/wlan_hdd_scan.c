@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -47,6 +47,7 @@
 #include <wlan_cfg80211_scan.h>
 
 #include "wlan_utility.h"
+#include "wlan_hdd_object_manager.h"
 
 #define MAX_RATES                       12
 #define HDD_WAKE_LOCK_SCAN_DURATION (5 * 1000) /* in msec */
@@ -478,8 +479,7 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 	enum scan_reject_states curr_reason;
 	static uint32_t scan_ebusy_cnt;
 	struct scan_params params = {0};
-
-	hdd_enter();
+	struct wlan_objmgr_vdev *vdev;
 
 	if (cds_is_fw_down()) {
 		hdd_err("firmware is down, scan cmd cannot be processed");
@@ -515,10 +515,6 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 		schedule_work(&adapter->scan_block_work);
 		return 0;
 	}
-
-	hdd_debug("Device_mode %s(%d)",
-		hdd_device_mode_to_string(adapter->device_mode),
-		adapter->device_mode);
 
 	/*
 	 * IBSS vdev does not need to scan to establish
@@ -674,15 +670,23 @@ static int __wlan_hdd_cfg80211_scan(struct wiphy *wiphy,
 			scan_info->scan_add_ie.length;
 	}
 
+	vdev = hdd_objmgr_get_vdev(adapter);
+	if (!vdev) {
+		status = -EINVAL;
+		goto error;
+	}
+
 	if ((request->n_ssids == 1) && (request->ssids != NULL) &&
 	    (request->ssids[0].ssid_len > 7) &&
 	     !qdf_mem_cmp(&request->ssids[0], "DIRECT-", 7))
-		ucfg_p2p_status_scan(adapter->vdev);
+		ucfg_p2p_status_scan(vdev);
 
-	status = wlan_cfg80211_scan(hdd_ctx->pdev, request, &params);
+	status = wlan_cfg80211_scan(vdev, request, &params);
+	hdd_objmgr_put_vdev(vdev);
+error:
 	if (params.default_ie.ptr)
 		qdf_mem_free(params.default_ie.ptr);
-	hdd_exit();
+
 	return status;
 }
 
@@ -1283,12 +1287,15 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 {
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct hdd_context *hdd_ctx;
+	struct wlan_objmgr_vdev *vdev;
 	int ret;
+	enum QDF_GLOBAL_MODE curr_mode;
 
-	hdd_enter();
+	curr_mode = hdd_get_conparam();
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err("Command not allowed in FTM mode");
+	if (QDF_GLOBAL_FTM_MODE == curr_mode ||
+	    QDF_GLOBAL_MONITOR_MODE == curr_mode) {
+		hdd_err_rl("Command not allowed in FTM/Monitor mode");
 		return -EINVAL;
 	}
 
@@ -1318,8 +1325,14 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
 		return -EBUSY;
 	}
 
-	return wlan_cfg80211_sched_scan_start(hdd_ctx->pdev, dev, request,
+	vdev = hdd_objmgr_get_vdev(adapter);
+	if (!vdev)
+		return -EINVAL;
+	ret = wlan_cfg80211_sched_scan_start(vdev, request,
 				      hdd_ctx->config->scan_backoff_multiplier);
+	hdd_objmgr_put_vdev(vdev);
+
+	return ret;
 }
 
 /**
@@ -1348,6 +1361,8 @@ int wlan_hdd_sched_scan_stop(struct net_device *dev)
 {
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct hdd_context *hdd_ctx;
+	struct wlan_objmgr_vdev *vdev;
+	int ret;
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");
@@ -1367,7 +1382,13 @@ int wlan_hdd_sched_scan_stop(struct net_device *dev)
 		return -EINVAL;
 	}
 
-	return wlan_cfg80211_sched_scan_stop(hdd_ctx->pdev, dev);
+	vdev = hdd_objmgr_get_vdev(adapter);
+	if (!vdev)
+		return -EINVAL;
+	ret = wlan_cfg80211_sched_scan_stop(vdev);
+	hdd_objmgr_put_vdev(vdev);
+
+	return ret;
 }
 
 /**
@@ -1385,11 +1406,13 @@ static int __wlan_hdd_cfg80211_sched_scan_stop(struct net_device *dev)
 {
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	int errno;
+	enum QDF_GLOBAL_MODE curr_mode;
 
-	hdd_enter();
+	curr_mode = hdd_get_conparam();
 
-	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
-		hdd_err_rl("Command not allowed in FTM mode");
+	if (QDF_GLOBAL_FTM_MODE == curr_mode ||
+	    QDF_GLOBAL_MONITOR_MODE == curr_mode) {
+		hdd_err_rl("Command not allowed in FTM/Monitor mode");
 		return -EINVAL;
 	}
 
@@ -1431,8 +1454,6 @@ static int __wlan_hdd_cfg80211_sched_scan_stop(struct net_device *dev)
 
 	errno = wlan_hdd_sched_scan_stop(dev);
 
-	hdd_exit();
-
 	return errno;
 }
 
@@ -1446,7 +1467,16 @@ int wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
 	ret = __wlan_hdd_cfg80211_sched_scan_stop(dev);
 	cds_ssr_unprotect(__func__);
 
-	return ret;
+	/* The return 0 is intentional. We observed a crash due to a return of
+	 * failure in sched_scan_stop , especially for a case where the unload
+	 * of the happens at the same time. The function
+	 * __cfg80211_stop_sched_scan was clearing rdev->sched_scan_req only
+	 * when the sched_scan_stop returns success. If it returns a failure ,
+	 * then its next invocation due to the clean up of the second interface
+	 * will have the dev pointer corresponding to the first one leading to
+	 * a crash.
+	 */
+	return 0;
 }
 #else
 int wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
@@ -1459,7 +1489,16 @@ int wlan_hdd_cfg80211_sched_scan_stop(struct wiphy *wiphy,
 	ret = __wlan_hdd_cfg80211_sched_scan_stop(dev);
 	cds_ssr_unprotect(__func__);
 
-	return ret;
+	/* The return 0 is intentional. We observed a crash due to a return of
+	 * failure in sched_scan_stop , especially for a case where the unload
+	 * of the happens at the same time. The function
+	 * __cfg80211_stop_sched_scan was clearing rdev->sched_scan_req only
+	 * when the sched_scan_stop returns success. If it returns a failure ,
+	 * then its next invocation due to the clean up of the second interface
+	 * will have the dev pointer corresponding to the first one leading to
+	 * a crash.
+	 */
+	return 0;
 }
 #endif /* KERNEL_VERSION(4, 12, 0) */
 #endif /*FEATURE_WLAN_SCAN_PNO */
