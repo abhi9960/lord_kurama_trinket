@@ -287,21 +287,6 @@ void wlan_serialization_remove_cmd(
 		struct wlan_serialization_queued_cmd_info *cmd);
 
 /**
- * wlan_serialization_flush_cmd() - Request to flush command
- * @cmd: Command information
- *
- * This API is used to flush a cmd sitting in the queue. It
- * simply flushes the cmd from the queue and does not call
- * any callbacks in between. If the request is for active
- * queue, and if the active queue becomes empty upon flush,
- * then it will pick the next pending cmd and put in the active
- * queue before returning.
- *
- * Return: None
- */
-void wlan_serialization_flush_cmd(
-		struct wlan_serialization_queued_cmd_info *cmd);
-/**
  * wlan_serialization_request() - Request to serialize a command
  * @cmd: Command information
  *
@@ -423,17 +408,6 @@ enum wlan_serialization_cmd_status
 wlan_serialization_pdev_scan_status(struct wlan_objmgr_pdev *pdev);
 
 /**
- * wlan_serialization_non_scan_cmd_status() - Return status of pdev non-scan cmd
- * @pdev: PDEV Object
- * @cmd_id: ID of the command for which the status has to be checked
- *
- * Return: Status of the command for the corresponding pdev
- */
-enum wlan_serialization_cmd_status
-wlan_serialization_non_scan_cmd_status(struct wlan_objmgr_pdev *pdev,
-		enum wlan_serialization_cmd_type cmd_id);
-
-/**
  * wlan_serialization_is_cmd_present_in_pending_queue() - Return if the command
  *				is already present in pending queue
  * @cmd: pointer to serialization command to check
@@ -459,6 +433,22 @@ bool wlan_serialization_is_cmd_present_in_pending_queue(
 bool wlan_serialization_is_cmd_present_in_active_queue(
 		struct wlan_objmgr_psoc *psoc,
 		struct wlan_serialization_command *cmd);
+
+/**
+ * wlan_serialization_purge_all_pdev_cmd() - purge all command for given pdev
+ * @pdev: objmgr pdev pointer
+ *
+ * Return: void
+ */
+void wlan_serialization_purge_all_pdev_cmd(struct wlan_objmgr_pdev *pdev);
+
+/**
+ * wlan_serialization_purge_all_cmd() - purge all command for psoc
+ * @psoc: objmgr psoc pointer
+ *
+ * Return: void
+ */
+void wlan_serialization_purge_all_cmd(struct wlan_objmgr_psoc *psoc);
 
 /**
  * wlan_serialization_get_scan_cmd_using_scan_id() - Return command which

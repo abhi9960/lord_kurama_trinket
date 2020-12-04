@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -33,7 +33,7 @@
 #include <wlan_osif_priv.h>
 #include "wlan_cfg80211.h"
 #include "wlan_cfg80211_p2p.h"
-
+#include "wlan_hdd_main.h"
 #define MAX_NO_OF_2_4_CHANNELS 14
 #define MAX_OFFCHAN_TIME_FOR_DNBS 150
 
@@ -54,10 +54,6 @@ static void wlan_p2p_rx_callback(void *user_data,
 	struct vdev_osif_priv *osif_priv;
 	struct wireless_dev *wdev;
 	uint16_t freq;
-
-	cfg80211_debug("user data:%pK, vdev id:%d, rssi:%d, buf:%pK, len:%d",
-		user_data, rx_frame->vdev_id, rx_frame->rx_rssi,
-		rx_frame->buf, rx_frame->frame_len);
 
 	psoc = user_data;
 	if (!psoc) {
@@ -86,13 +82,13 @@ static void wlan_p2p_rx_callback(void *user_data,
 
 	if (rx_frame->rx_chan <= MAX_NO_OF_2_4_CHANNELS)
 		freq = ieee80211_channel_to_frequency(
-			rx_frame->rx_chan, NL80211_BAND_2GHZ);
+			rx_frame->rx_chan, HDD_NL80211_BAND_2GHZ);
 	else
 		freq = ieee80211_channel_to_frequency(
-			rx_frame->rx_chan, NL80211_BAND_5GHZ);
+			rx_frame->rx_chan, HDD_NL80211_BAND_5GHZ);
 
-	cfg80211_debug("Indicate frame over nl80211, vdev id:%d, idx:%d",
-		   rx_frame->vdev_id, wdev->netdev->ifindex);
+	cfg80211_debug("Indicate frame over nl80211, idx:%d",
+			wdev->netdev->ifindex);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
 	cfg80211_rx_mgmt(wdev, freq, rx_frame->rx_rssi * 100,
@@ -128,10 +124,6 @@ static void wlan_p2p_action_tx_cnf_callback(void *user_data,
 	struct vdev_osif_priv *osif_priv;
 	struct wireless_dev *wdev;
 	bool is_success;
-
-	cfg80211_debug("user data:%pK, action cookie:%llx, buf:%pK, len:%d, tx status:%d",
-		user_data, tx_cnf->action_cookie, tx_cnf->buf,
-		tx_cnf->buf_len, tx_cnf->status);
 
 	psoc = user_data;
 	if (!psoc) {
@@ -413,16 +405,17 @@ int wlan_cfg80211_mgmt_tx(struct wlan_objmgr_vdev *vdev,
 	struct p2p_mgmt_tx mgmt_tx = {0};
 	struct wlan_objmgr_psoc *psoc;
 	uint8_t vdev_id;
+	uint32_t channel = 0;
 
 	if (!vdev) {
 		cfg80211_err("invalid vdev object");
 		return -EINVAL;
 	}
 
-	if (!chan) {
-		cfg80211_err("invalid channel");
-		return -EINVAL;
-	}
+	if (chan)
+		channel = (uint32_t)wlan_freq_to_chan(chan->center_freq);
+	else
+		cfg80211_debug("NULL chan, set channel to 0");
 
 	psoc = wlan_vdev_get_psoc(vdev);
 	vdev_id = wlan_vdev_get_id(vdev);
@@ -438,7 +431,6 @@ int wlan_cfg80211_mgmt_tx(struct wlan_objmgr_vdev *vdev,
 	if (wait > MAX_OFFCHAN_TIME_FOR_DNBS) {
 		int ret;
 		bool ok;
-		uint32_t channel = wlan_freq_to_chan(chan->center_freq);
 
 		ret = policy_mgr_is_chan_ok_for_dnbs(psoc, channel, &ok);
 		if (QDF_IS_STATUS_ERROR(ret)) {
@@ -454,7 +446,7 @@ int wlan_cfg80211_mgmt_tx(struct wlan_objmgr_vdev *vdev,
 	}
 
 	mgmt_tx.vdev_id = (uint32_t)vdev_id;
-	mgmt_tx.chan = (uint32_t)wlan_freq_to_chan(chan->center_freq);
+	mgmt_tx.chan = channel;
 	mgmt_tx.wait = wait;
 	mgmt_tx.len = len;
 	mgmt_tx.no_cck = (uint32_t)no_cck;
