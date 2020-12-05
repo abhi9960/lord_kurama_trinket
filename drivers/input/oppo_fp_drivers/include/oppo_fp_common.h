@@ -32,6 +32,7 @@
 
 typedef enum {
         FP_FPC_1511,
+        FP_EGIS_520,
         FP_UNKNOWN,
 } fp_vendor_t;
 

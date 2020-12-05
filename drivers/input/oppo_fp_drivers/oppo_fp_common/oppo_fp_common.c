@@ -48,6 +48,7 @@
 #define CHIP_UNKNOWN    "unknown"
 
 #define ENGINEER_MENU_FPC1511  "-1,-1"  /* content in " " represents SNR,inclination test item in order in engineer menu, and -1/1 means off/on */
+#define ENGINEER_MENU_EGIS520  "-1,-1"
 #define ENGINEER_MENU_DEFAULT  "-1,-1"
 
 static struct proc_dir_entry *fp_id_dir = NULL;
@@ -70,6 +71,7 @@ extern int egis_opticalfp_irq_handler(struct fp_underscreen_info* tp_info);
 #if CONFIG_OPPO_FINGERPRINT_PROJCT == 19631 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19633 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19632 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19637 || CONFIG_OPPO_FINGERPRINT_PROJCT == 19638
 fp_module_config_t fp_module_config_list[] = {
     {{1, -1, -1},  FP_FPC_1511, CHIP_FPC, ENGINEER_MENU_FPC1511},
+    {{1,  0, -1},  FP_EGIS_520, CHIP_EGIS, ENGINEER_MENU_EGIS520},
 };
 #endif
 
@@ -201,6 +203,11 @@ static int fp_get_matched_chip_module(struct device *dev, int fp_id1, int fp_id2
                     strncat(fp_manu, "_1511", FP_ID_SUFFIX_MAX_LENGTH - 1);
                     strncpy(g_engineermode_menu_config, fp_module_config_list[i].engineermode_menu_config, ENGINEER_MENU_SELECT_MAXLENTH - 1);
                     return FP_FPC_1511;
+                case FP_EGIS_520:
+                    strncpy(fp_manu, CHIP_EGIS, FP_ID_MAX_LENGTH - FP_ID_SUFFIX_MAX_LENGTH);
+                    strncat(fp_manu, "_520", FP_ID_SUFFIX_MAX_LENGTH - 1);
+                    strncpy(g_engineermode_menu_config, fp_module_config_list[i].engineermode_menu_config, ENGINEER_MENU_SELECT_MAXLENTH - 1);
+					return FP_EGIS_520;
                 default:
                     dev_err(dev, "gpio ids matched but no matched vendor chip!");
                     return FP_UNKNOWN;
