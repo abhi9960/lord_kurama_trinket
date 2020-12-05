@@ -464,6 +464,18 @@ static int core_spi_write(u8 *data, int len)
 	u8 *txbuf = NULL;
 	int safe_size = len;
 
+	u8 wakeup[10] = {0x82, 0x25, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3};
+	
+	/* if system is suspended, wake up our spi pll clock before communication. */
+	if (idev->suspend && idev->spi_gesture_cmd) {
+		   ipio_info("Write dummy cmd to wake up spi pll clock\n");
+		   if (idev->spi_write_then_read(idev->spi, wakeup, sizeof(wakeup), NULL, 0) < 0) {
+				   ipio_err("spi write wake up cmd failed\n");
+				   return -EIO;
+		   }
+	}
+
+
 	if (atomic_read(&idev->ice_stat) == DISABLE) {
 		do {
 			ret = core_spi_ice_mode_write(data, len);
@@ -751,6 +763,7 @@ static int ilitek_spi_remove(struct spi_device *spi)
 
 static struct spi_device_id tp_spi_id[] = {
 	{TDDI_DEV_ID, 0},
+	{},
 };
 
 int ilitek_tddi_interface_dev_init(struct ilitek_hwif_info *hwif)

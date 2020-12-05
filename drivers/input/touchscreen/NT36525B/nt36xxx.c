@@ -21,6 +21,10 @@
 #include <linux/proc_fs.h>
 #include <linux/uaccess.h>
 #include <linux/input/mt.h>
+#ifndef ODM_WT_EDIT
+#define ODM_WT_EDIT
+#endif
+
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2018/11/20,solve novatek build error
 #include <linux/pm_wakeirq.h>
@@ -45,19 +49,21 @@
 #include <linux/update_tpfw_notifier.h>
 #include <linux/usb_notifier.h>
 #include <linux/headset_notifier.h>
+#include <soc/oppo/device_info.h>
+
 
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/01/11, add tpd_summer
-#include <linux/tpd_summer.h>
-#include <linux/hardware_info.h>
+//#include <linux/tpd_summer.h>
+//#include <linux/hardware_info.h>
 #endif
 
-#define FTS_UPGRADE_TCL_FILE "csot/NT36525B_CSOT_0622_HDp_PID5F1E_OPPO_V09_20190622.h"
+#define FTS_UPGRADE_HLTG_FILE "hltg/NT36525B_BOE_0652_HDp_PID5F27_OPPO.h"
 #define FTS_UPGRADE_SKYW_FILE "skyw/NT36525B_INX_0622_HDp_PID5F1F_OPPO_V06_20190403.h"
 #define FTS_UPGRADE_HLT_FILE "hlt/NT36525B_BOE_0652_HDp_PID5F27_OPPO.h"
 
-const u8 up_fw_kernel_tcl[] = {
-#include FTS_UPGRADE_TCL_FILE
+const u8 up_fw_kernel_hltg[] = {
+#include FTS_UPGRADE_HLTG_FILE
 };
 
 const u8 up_fw_kernel_skyw[] = {
@@ -69,8 +75,7 @@ const u8 up_fw_kernel_hlt[] = {
 };
 
 //extern int get_boot_mode(void);
-extern void devinfo_info_tp_set(char *version, char *manufacture, char *fw_path);
-extern int register_tp_proc(char *name, char *version, char *manufacture ,char *fw_path);
+//extern void devinfo_info_tp_set(char *version, char *manufacture, char *fw_path);
 
 #if NVT_TOUCH_ESD_PROTECT
 static struct delayed_work nvt_esd_check_work;
@@ -83,6 +88,8 @@ uint8_t esd_retry = 0;
 
 static unsigned long nvt_tp_usb_state = 0;
 static unsigned long nvt_tp_headset_state = 0;
+
+unsigned int shutdown_nvt_flag = 0;//0:normal work; 1:TP shutdown
 
 static char version[20] = {"0"};
 
@@ -97,7 +104,7 @@ extern int32_t nvt_extra_proc_init(void);
 
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/07/04, add hardware_info
-extern char Ctp_name[HARDWARE_MAX_ITEM_LONGTH];
+//extern char Ctp_name[HARDWARE_MAX_ITEM_LONGTH];
 #endif
 
 int g_gesture = 0;
@@ -122,6 +129,9 @@ static int fb_notifier_callback(struct notifier_block *self, unsigned long event
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
 #endif
+
+extern int register_tp_proc(char *name, char *version, char *manufacture ,char *fw_path);
+
 
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; //read from dtsi
@@ -168,8 +178,8 @@ const struct mtk_chip_config spi_ctrdata = {
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2018/12/04,Add skyw novatek TP IC
 struct upgrade_fw_info nvt_fw_list[] = {
-    {HLT,  "hlt", BOOT_UPDATE_FIRMWARE_HLT_NAME,  MP_UPDATE_FIRMWARE_HLT_NAME, up_fw_kernel_hlt, sizeof(up_fw_kernel_hlt),  OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT},
-    {COST, "cost",BOOT_UPDATE_FIRMWARE_TCL_NAME,  MP_UPDATE_FIRMWARE_TCL_NAME, up_fw_kernel_tcl, sizeof(up_fw_kernel_tcl),  OPPO_BOOT_UPDATE_FIRMWARE_NAME_TCL},
+    {HLT, "hlt", BOOT_UPDATE_FIRMWARE_HLT_NAME,  MP_UPDATE_FIRMWARE_HLT_NAME, up_fw_kernel_hlt, sizeof(up_fw_kernel_hlt),  OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT},
+    {HLTG, "hltg",BOOT_UPDATE_FIRMWARE_HLTG_NAME,  MP_UPDATE_FIRMWARE_HLTG_NAME, up_fw_kernel_hltg, sizeof(up_fw_kernel_hltg),  OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLTG},
     {SKYW, "skwy",BOOT_UPDATE_FIRMWARE_SKYW_NAME, MP_UPDATE_FIRMWARE_SKYW_NAME,up_fw_kernel_skyw,sizeof(up_fw_kernel_skyw), OPPO_BOOT_UPDATE_FIRMWARE_NAME_SK},
 };
 struct upgrade_fw_info *fw;
@@ -818,15 +828,15 @@ info_retry:
 	}
 
 	if ( ts->vendor_id == 0 ){
-		sprintf(Ctp_name,"HLT,NT525B,FW:0x%x\n",ts->fw_ver);
+	//	sprintf(Ctp_name,"HLT,NT525B,FW:0x%x\n",ts->fw_ver);
 	    sprintf(version,"HLT_nt525b_0x%02x",ts->fw_ver);
-	    devinfo_info_tp_set(version, "HLT",OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT);
+	//    devinfo_info_tp_set(version, "HLT",OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT);
 		rmtp = register_tp_proc("tp",version, "HLT",OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT);
-	} else {
-		sprintf(Ctp_name,"INX,NT525B,FW:0x%x\n",ts->fw_ver);
-        sprintf(version,"SKYW_nt525_0x%02x",ts->fw_ver);
-	    devinfo_info_tp_set(version, "SKYW",OPPO_BOOT_UPDATE_FIRMWARE_NAME_SK);
-		rmtp = register_tp_proc("tp",version, "HLT",OPPO_BOOT_UPDATE_FIRMWARE_NAME_SK);
+	} else if ( ts->vendor_id == 1 ){
+	//	sprintf(Ctp_name,"HLTGG3,NT525B,FW:0x%x\n",ts->fw_ver);
+        sprintf(version,"HLTGG3_nt525b_0x%02x",ts->fw_ver);
+	//    devinfo_info_tp_set(version, "HLTGG3",OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLTG);
+		rmtp = register_tp_proc("tp",version, "HLTGG3",OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLTG);
 	}
 
 	//---Get Novatek PID---
@@ -1477,6 +1487,21 @@ int32_t nvt_enable_hopping_polling_mode(bool enable)
 
     return ret;
 }
+int32_t nvt_enable_hopping_fix_freq_mode(bool enable)
+{
+    int32_t ret = -1;
+
+    NVT_LOG("%s:enable = %d\n", __func__, enable);
+
+    if (enable)
+        ret = nvt_cmd_store(HOST_CMD_HOPPING_FIX_FREQ_ON);
+    else
+        ret = nvt_cmd_store(HOST_CMD_HOPPING_FIX_FREQ_OFF);
+
+    return ret;
+}
+
+
 #endif
 
 int32_t nvt_mode_switch(NVT_CUSTOMIZED_MODE mode, uint8_t flag)
@@ -1577,7 +1602,7 @@ static bool nvt_corner_point_process(int i)
     int j;
 	int flag = 0;
 	if (ts->nvt_oppo_proc_data->edge_limit.limit_00 == 0) {
-		//½Úµã/proc/touchpanel/oppo_tp_limit_enableµÄbit1Î»À´¿ØÖÆ¿ØÖÆ
+		//Â½ÃšÂµÃ£/proc/touchpanel/oppo_tp_limit_enableÂµÃ„bit1ÃŽÂ»Ã€Â´Â¿Ã˜Ã–Ã†Â¿Ã˜Ã–Ã†
 		if ((ts->nvt_oppo_proc_data->edge_limit.limit_lu) &&
 			(ts->nvt_oppo_proc_data->nvt_point_info[i].x < ts->nvt_oppo_proc_data->nvt_limit_area.area_xlu &&
 			ts->nvt_oppo_proc_data->nvt_point_info[i].y < ts->nvt_oppo_proc_data->nvt_limit_area.area_ylu)) {
@@ -1592,7 +1617,7 @@ static bool nvt_corner_point_process(int i)
 			flag = 1;
 
         }
-         //½Úµã/proc/touchpanel/oppo_tp_limit_enableµÄbit2Î»À´¿ØÖÆ¿ØÖÆ
+         //Â½ÃšÂµÃ£/proc/touchpanel/oppo_tp_limit_enableÂµÃ„bit2ÃŽÂ»Ã€Â´Â¿Ã˜Ã–Ã†Â¿Ã˜Ã–Ã†
         if ((ts->nvt_oppo_proc_data->edge_limit.limit_ru)  &&
 			(ts->nvt_oppo_proc_data->nvt_point_info[i].x > ts->nvt_oppo_proc_data->nvt_limit_area.area_xru &&
 			ts->nvt_oppo_proc_data->nvt_point_info[i].y < ts->nvt_oppo_proc_data->nvt_limit_area.area_yru)) {
@@ -1607,7 +1632,7 @@ static bool nvt_corner_point_process(int i)
 			flag = 1;
 
         }
-         //½Úµã/proc/touchpanel/oppo_tp_limit_enableµÄbit3Î»À´¿ØÖÆ¿ØÖÆ
+         //Â½ÃšÂµÃ£/proc/touchpanel/oppo_tp_limit_enableÂµÃ„bit3ÃŽÂ»Ã€Â´Â¿Ã˜Ã–Ã†Â¿Ã˜Ã–Ã†
        if ((ts->nvt_oppo_proc_data->edge_limit.limit_lb) &&
 	   	(ts->nvt_oppo_proc_data->nvt_point_info[i].x < ts->nvt_oppo_proc_data->nvt_limit_area.area_xlb &&
 	   	ts->nvt_oppo_proc_data->nvt_point_info[i].y > ts->nvt_oppo_proc_data->nvt_limit_area.area_ylb)) {
@@ -1622,7 +1647,7 @@ static bool nvt_corner_point_process(int i)
 			flag = 1;
 
         }
-         //½Úµã/proc/touchpanel/oppo_tp_limit_enableµÄbit4Î»À´¿ØÖÆ¿ØÖÆ
+         //Â½ÃšÂµÃ£/proc/touchpanel/oppo_tp_limit_enableÂµÃ„bit4ÃŽÂ»Ã€Â´Â¿Ã˜Ã–Ã†Â¿Ã˜Ã–Ã†
        if ((ts->nvt_oppo_proc_data->edge_limit.limit_rb) &&
 	   	(ts->nvt_oppo_proc_data->nvt_point_info[i].x > ts->nvt_oppo_proc_data->nvt_limit_area.area_xrb &&
 	   	ts->nvt_oppo_proc_data->nvt_point_info[i].y > ts->nvt_oppo_proc_data->nvt_limit_area.area_yrb)) {
@@ -1638,7 +1663,7 @@ static bool nvt_corner_point_process(int i)
 			flag = 1;
 
         }
-        //×ø±êµãÎª·Ç±ß½ÇÇøÓòÊ±£¬µ¯ÆðÇ°Ãæ¼ÇÂ¼µÄ±ß½Ç×ø±êµã
+        //Ã—Ã¸Â±ÃªÂµÃ£ÃŽÂªÂ·Ã‡Â±ÃŸÂ½Ã‡Ã‡Ã¸Ã“Ã²ÃŠÂ±Â£Â¬ÂµÂ¯Ã†Ã°Ã‡Â°ÃƒÃ¦Â¼Ã‡Ã‚Â¼ÂµÃ„Â±ÃŸÂ½Ã‡Ã—Ã¸Â±ÃªÂµÃ£
         if (ts->nvt_oppo_proc_data->nvt_point_info[i].type != NVT_AREA_CORNER) {
 
             if (ts->nvt_oppo_proc_data->nvt_limit_area.which_area == NVT_AREA_CORNER) {
@@ -2040,6 +2065,7 @@ Description:
 return:
 	touchscreen version and lockdown info
 ********************************************************/
+/*
 static int __maybe_unused tid_get_version(struct device *dev, int *major, int *minor)
 {
 	*major = 0;
@@ -2055,7 +2081,7 @@ static int __maybe_unused tid_get_lockdown_info(struct device *dev, char *out_va
 	}
 	return 0;
 }
-
+*/
 
 static void nvt_resume_workqueue(struct work_struct *work)
 {
@@ -2255,7 +2281,7 @@ static void nvt_tp_headset_workqueue(struct work_struct *work)
 			}
 		}
 		if (nvt_tp_headset_state == 0) {
-			ret = nvt_mode_switch(MODE_HEADSET,true);
+			ret = nvt_mode_switch(MODE_HEADSET,false);
 			if (ret) {
 				NVT_LOG("%s:plug out fail\n",__func__);
 			}
@@ -2338,9 +2364,15 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	if ( nt_ctpmodule == 0 ) {
 		NVT_LOG("this is hlt_boe nt36525b touchscreen\n");
 	}else{
-		NVT_LOG("this is another nt36525b touchscreen\n");
-		return -1;
-	}
+		nt_ctpmodule = strncmp(temp,"hlt_boe_gg3_video_display",strlen("hlt_boe_gg3_video_display"));
+		if( nt_ctpmodule == 0 ) {
+			NVT_LOG("this is hlt_gg3_boe nt36525b touchscreen\n");
+			nt_ctpmodule = 1;
+			} else {
+					NVT_LOG("this is another nt36525b touchscreen\n");
+					return -1;
+			}
+		}
 #endif
 	NVT_LOG("start\n");
 
@@ -2730,21 +2762,13 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 static void nvt_ts_shutdown(struct spi_device *client)
 {
 	NVT_LOG("Shutdown driver...\n");
-
+	bTouchIsAwake = 0;
+	shutdown_nvt_flag = 1;
 	nvt_irq_enable(false);
 
 #if NVT_TOUCH_ESD_PROTECT
-	cancel_delayed_work_sync(&nvt_esd_check_work);
 	nvt_esd_check_enable(false);
-	if (nvt_esd_check_wq)
-		destroy_workqueue(nvt_esd_check_wq);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
-
-#if BOOT_UPDATE_FIRMWARE
-	if (nvt_fwu_wq)
-		destroy_workqueue(nvt_fwu_wq);
-#endif
-
 }
 
 /*******************************************************

@@ -21,6 +21,9 @@
  */
 
 #include "ilitek.h"
+#ifndef ODM_WT_EDIT
+#define ODM_WT_EDIT
+#endif
 
 #define DTS_INT_GPIO	"touch,irq-gpio"
 #define DTS_RESET_GPIO	"touch,reset-gpio"
@@ -38,11 +41,11 @@ unsigned char fw_xl[] = {
 };
 
 unsigned char fw_inx[] = {
-#include "firmware_ili/INX6500/RA105X0.ili"
+#include "firmware_ili/INX6500/RA170X1.ili"
 };
 
-unsigned char fw_inx_6217[] = {
-#include "firmware_ili/INX6217/RA105X6217.ili"
+unsigned char fw_xlgg3[] = {
+#include "firmware_ili/AUOGG3/RA170A1.ili"
 };
 
 #ifdef ODM_WT_EDIT
@@ -50,7 +53,7 @@ unsigned char fw_inx_6217[] = {
 struct upgrade_ili_fw_info ili_fw_list[] = {
     {XL, "TRULY", fw_xl,(int)sizeof(fw_xl), REQUEST_FW_PATH_AUO, XL_INI_NAME_PATH,OPPO_SIGN_AUO},
     {INX, "inx", fw_inx, (int)sizeof(fw_inx),REQUEST_FW_PATH_INX, INX_INI_NAME_PATH,OPPO_SIGN_INX},
-	{INX6217, "inx6217", fw_inx_6217, (int)sizeof(fw_inx_6217),REQUEST_FW_PATH_INX_6217, INX_INI_NAME_PATH_6217,NULL},
+	{XLGG3, "TRULYGG3", fw_xlgg3, (int)sizeof(fw_xlgg3),REQUEST_FW_PATH_XLGG3, XLGG3_INI_NAME_PATH,OPPO_SIGN_AUOGG3},
 };
 #endif
 
@@ -64,6 +67,7 @@ void lcd_resume_load_ili_fw(void)
 
 	ipio_info("lcd resume load ili fw begin idev->power_status = %d\n",idev->power_status);
 	mutex_lock(&idev->touch_mutex);
+//	idev->suspend = false;
 	if (idev->gesture)
 	{
 		disable_irq_wake(idev->irq_num);
@@ -537,8 +541,9 @@ static int ilitek_plat_notifier_msm_drm(struct notifier_block *self, unsigned lo
 			break;
 		case MSM_DRM_BLANK_UNBLANK:
 		//case MSM_DRM_BLANK_NORMAL:
-			if (event == MSM_DRM_EVENT_BLANK)
+			if (event == MSM_DRM_EVENT_BLANK){
 				ilitek_tddi_sleep_handler(TP_RESUME);
+			}
 			break;
 		default:
 			ipio_err("Unknown event, blank = %d\n", *blank);
@@ -701,9 +706,9 @@ dsi_ili9881h_innolux_inx_video_display  （群创的正式屏）
 			printk("this is INX  panel");
 			ili_ctpmodule = 1;
 		}else{
-			ili_ctpmodule = strncmp(temp,"truly_video",strlen("truly_video"));
+			ili_ctpmodule = strncmp(temp,"truly_auo_gg3_video",strlen("truly_auo_gg3_video"));
 			if(ili_ctpmodule == 0){
-				printk("this is INX 6.217 TEMP panel");
+				printk("this is XL AUOGG3 panel");
 				ili_ctpmodule = 2;
 			}else{
 				ili_ctpmodule = -1;

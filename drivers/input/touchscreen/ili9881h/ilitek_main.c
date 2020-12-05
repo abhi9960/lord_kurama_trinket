@@ -82,9 +82,8 @@ static void ilitek_resume_work_queue(struct work_struct *work)
 	ipio_info("TP resume end\n");
 	ilitek_tddi_wq_ctrl(WQ_ESD, ENABLE);
 	ilitek_tddi_wq_ctrl(WQ_BAT, ENABLE);*/
-
+	idev->suspend = false;
 	return;
-
 
 }
 
@@ -418,7 +417,7 @@ int ilitek_tddi_sleep_handler(int mode)
 			ipio_err("resume timeout\n");
 		}
 		mutex_lock(&idev->touch_mutex);	
-		idev->suspend = true;
+	//	idev->suspend = true;
 		ilitek_tddi_ic_func_ctrl("sense", DISABLE);
 		ilitek_tddi_ic_check_busy(5, 35);
 
@@ -443,6 +442,7 @@ int ilitek_tddi_sleep_handler(int mode)
 			}
 			ipio_info("power_status = %d\n",idev->power_status);
 		}
+		idev->suspend = true;
 		mutex_unlock(&idev->touch_mutex);
 		ipio_info("TP normal suspend end 20190505\n");
 		break;

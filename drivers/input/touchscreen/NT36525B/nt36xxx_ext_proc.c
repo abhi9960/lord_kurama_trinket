@@ -79,6 +79,8 @@ extern int oppo_nvt_blackscreen_test(void);
 extern void nvt_irq_enable(bool enable);
 extern void nvt_mode_change_cmd(uint8_t cmd);
 extern int nvt_enable_hopping_polling_mode(bool enable);
+extern int nvt_enable_hopping_fix_freq_mode(bool enable);
+
 
 
 #define SPI_TANSFER_LENGTH  256
@@ -110,6 +112,8 @@ int NT_SIGN = 0;
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
 bool hop_status = false;
+bool fix_status = false;
+static unsigned int oppo_game_switch_flag = 0;
 #endif
 
 #ifdef ODM_WT_EDIT
@@ -899,6 +903,8 @@ static const struct file_operations double_tap_enable_fops =
 };
 
 /* tp_fw_update */
+extern uint8_t request_and_download_normal_complete;
+extern uint8_t request_and_download_sign_complete;
 static ssize_t oppo_fw_update_write(struct file *filp, const char __user *buf,
 		size_t count, loff_t *ppos)
 {
@@ -931,20 +937,24 @@ static ssize_t oppo_fw_update_write(struct file *filp, const char __user *buf,
 	NVT_LOG("update_type is %d\n", update_type);
 	switch (update_type) {
 		case 0:	/* noflash: force update. flash: force update */
+            NT_SIGN = 0;
+            request_and_download_normal_complete = false;
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2018/12/04,Add skyw novatek TP IC
 			nvt_update_firmware(fw->firmware_name);
 #endif
-			NT_SIGN = 0;
 			break;
 		case 1: /* noflash: do nothing. flash: check fw version and update */
 			NVT_ERR("update_type %d. Do nothing for noflash\n", update_type);
+   			NT_SIGN = 0;
+            request_and_download_normal_complete = false;
 			nvt_update_firmware(fw->firmware_name);
-			NT_SIGN = 0;
 			break;
 		case 2:
+            NVT_ERR("update_type %d. Do nothing for sign firmware\n", update_type);
+            NT_SIGN = 1;
+            request_and_download_sign_complete = false;
 			nvt_update_firmware(fw->firmware_sign_name);
-			NT_SIGN = 1;
 			break;
 		default:
 			NVT_ERR("update_type %d error\n", update_type);
@@ -1314,6 +1324,72 @@ static ssize_t oppo_tp_hop_test_read(struct file *file, char __user *buf, size_t
 }
 #endif
 
+#ifdef ODM_WT_EDIT
+//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_FIX
+static ssize_t oppo_tp_fix_test_write(struct file *filp, const char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	unsigned int tmp = 0;
+	char cmd[128] = {0};
+
+	if(ts->is_suspended == 1){
+		NVT_ERR("oppo_tp_direction write: the NT device is already suspend\n");
+		return -1;
+	}
+	if(copy_from_user(cmd, buf, count)) {
+		NVT_ERR("input value error\n");
+		return -EINVAL;
+	}
+#ifdef ODM_WT_EDIT
+//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/07/04,avoid use user buf
+	sscanf(cmd, "%x", &tmp);
+#endif
+	if((tmp != 0)&&(tmp != 1)){
+		NVT_ERR("fix_test invalid value tmp = %d\n",tmp);
+		return -EINVAL;
+	}
+	if(tmp == 0)
+		fix_status = false;
+	if(tmp == 1)
+		fix_status = true;
+	NVT_LOG("edge reject limit_direction = %d\n",fix_status);
+	mutex_lock(&ts->lock);
+	nvt_enable_hopping_fix_freq_mode(fix_status);
+	mutex_unlock(&ts->lock);
+	return count;
+}
+static ssize_t oppo_tp_fix_test_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	ssize_t ret = 0;
+	uint8_t len;
+	char *ptr = NULL;
+	if (*ppos){
+		printk("is not at the page start \n");
+		return 0;
+	}
+	*ppos +=count;
+
+	if(ts->is_suspended == 1){
+		NVT_ERR("oppo_tp_fix_test read : the NT device is already suspend\n");
+		return -1;
+	}
+
+	NVT_LOG("%s +++ \n",__func__);
+
+	ptr = kzalloc(256,GFP_KERNEL);
+	if (ptr == NULL) {
+		NVT_ERR("alloc the ptr fail \n");
+		return -1;
+
+	}
+	len = snprintf(ptr, count,"%x\n",fix_status);
+	ret = copy_to_user(buf,ptr,len);
+	if (ret)
+		printk("copy_to_user fail \n");
+	return len;
+}
+#endif
+
 static const struct file_operations oppo_tp_limit_enable_fops =
 {
 	.write = oppo_tp_limit_enable_write,
@@ -1329,13 +1405,20 @@ static const struct file_operations oppo_tp_direction_fops =
 };
 
 #ifdef ODM_WT_EDIT
-//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
-static const struct file_operations oppo_tp_hop_test_fops =
+//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING
+static const struct file_operations freq_hop_simulate_fops =
 {
 	.write = oppo_tp_hop_test_write,
 	.read = oppo_tp_hop_test_read,
 	.owner = THIS_MODULE,
 };
+static const struct file_operations fix_hop_simulate_fops =
+{
+	.write = oppo_tp_fix_test_write,
+	.read = oppo_tp_fix_test_read,
+	.owner = THIS_MODULE,
+};
+
 #endif
 
 static int32_t openshort_open(struct inode *inode, struct file *file)
@@ -1567,10 +1650,6 @@ OUT:
     ts->nvt_oppo_proc_data->gesture_test.flag = 0;
 	g_gesture = ts->g_gesture_bak;
     ts->gesture_enable = ts->nvt_oppo_proc_data->gesture_test.gesture_backup;
-	if (ts->nvt_oppo_proc_data->gesture_test.gesture_backup == 0) {
-		//disable_irq(ts->client->irq);
-		nvt_irq_enable(0);
-	}
 	ret=copy_to_user(buf,ptr,len);
 
     //kfree(ts->nvt_oppo_proc_data);
@@ -1638,6 +1717,7 @@ static ssize_t oppo_game_switch_write(struct file *filp, const char __user *buf,
 	}
 	NVT_LOG("game switch enable is %d\n", tmp);
 	tmp = !!tmp;
+	oppo_game_switch_flag = tmp;
 
 	mutex_lock(&ts->lock);
 	if(nvt_mode_switch(MODE_GAME, tmp)) {
@@ -1647,9 +1727,36 @@ static ssize_t oppo_game_switch_write(struct file *filp, const char __user *buf,
 
 	return count;
 };
+static ssize_t oppo_game_switch_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	int len = 0;
+	char *ptr = NULL;
+
+	if ( *ppos ) {
+	    printk("is already read the file\n");
+        return 0;
+	}
+    *ppos += count;
+
+    ptr = kzalloc(count,GFP_KERNEL);
+	if(ptr == NULL){
+		printk("allocate memory fail\n");
+		return -1;
+	}
+
+    len = snprintf(ptr, count,"%d\n",oppo_game_switch_flag);
+
+    ret = copy_to_user(buf,ptr,len);
+
+	kfree(ptr);
+	return len;
+}
+
 
 static const struct file_operations game_switch_enable_fops =
 {
+	.read = oppo_game_switch_read,
 	.write = oppo_game_switch_write,
 	.owner = THIS_MODULE,
 };
@@ -1693,10 +1800,6 @@ int32_t nvt_extra_proc_init(void)
 		NVT_MK_PROC_ENTRY(oppo_tp_limit_area, 0664, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
 		NVT_MK_PROC_ENTRY(oppo_tp_limit_enable, 0666, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
 		NVT_MK_PROC_ENTRY(oppo_tp_direction, 0666, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
-		#ifdef ODM_WT_EDIT
-		//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
-		NVT_MK_PROC_ENTRY(oppo_tp_hop_test, 0666, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
-		#endif
 		NVT_MK_PROC_ENTRY(tp_fw_update, 0644, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
 		NVT_MK_PROC_ENTRY(i2c_device_test, 0644, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
 		NVT_MK_PROC_ENTRY(black_screen_test, 0666, ts->nvt_oppo_proc_data->touchpanel_dir_entry)
@@ -1706,6 +1809,11 @@ int32_t nvt_extra_proc_init(void)
 		NVT_MK_PROC_ENTRY(delta, 0664, ts->nvt_oppo_proc_data->debug_info_dir_entry)
 		NVT_MK_PROC_ENTRY(baseline, 0664, ts->nvt_oppo_proc_data->debug_info_dir_entry)
 		NVT_MK_PROC_ENTRY(main_register, 0664, ts->nvt_oppo_proc_data->debug_info_dir_entry)
+		#ifdef ODM_WT_EDIT
+		//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
+		NVT_MK_PROC_ENTRY(freq_hop_simulate, 0666, ts->nvt_oppo_proc_data->debug_info_dir_entry)
+		NVT_MK_PROC_ENTRY(fix_hop_simulate, 0666, ts->nvt_oppo_proc_data->debug_info_dir_entry)
+		#endif
 
 		NVT_MK_PROC_DIR(touchscreen, NULL)
 		NVT_MK_PROC_ENTRY(ctp_openshort_test, 0666, ts->nvt_oppo_proc_data->touchscreen_dir_entry)

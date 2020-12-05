@@ -1109,11 +1109,11 @@ static int ilitek_tdd_fw_hex_open(u8 open_file_method, u8 *pfw)
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP,2019/06/05,Add sign firmware function begain
 	if (sign_firmware == 0) {
-		ipio_info("Open file method = %s, path = %s,sign_firmware = %d,ili_fw->oppo_bin = %s\n",
-			open_file_method ? "FILP_OPEN" : "REQUEST_FIRMWARE", UPDATE_FW_PATH,sign_firmware,ili_fw->firmware_bin_name);
+		ipio_info("Open file method = %s,sign_firmware = %d,ili_fw->oppo_bin = %s\n",
+			open_file_method ? "FILP_OPEN" : "REQUEST_FIRMWARE",sign_firmware,ili_fw->firmware_bin_name);
 	} else {
-		ipio_info("Open file method = %s, path = %s,sign_firmware = %d,ili_fw->oppo_sign_bin = %s\n",
-			open_file_method ? "FILP_OPEN" : "REQUEST_FIRMWARE", UPDATE_FW_PATH,sign_firmware,ili_fw->oppo_sign_bin);
+		ipio_info("Open file method = %s,sign_firmware = %d,ili_fw->oppo_sign_bin = %s\n",
+			open_file_method ? "FILP_OPEN" : "REQUEST_FIRMWARE",sign_firmware,ili_fw->oppo_sign_bin);
 	}
 	switch (open_file_method) {
 	case REQUEST_FIRMWARE:
@@ -1262,13 +1262,16 @@ int ilitek_tddi_fw_upgrade(int upgrade_type, int file_type, int open_file_method
 			ipio_err("Open hex file fail, try upgrade from ILI file ili_ctpmodule = %d\n",ili_ctpmodule);
 			switch (ili_ctpmodule){
 				case 0 :
-				case 1 :
 					ilitek_tddi_fw_ili_convert_xl(pfw);
-					ipio_info("load New panel ILI file");
+					ipio_info("load xl panel ILI file");
+					break;
+				case 1 :
+					ilitek_tddi_fw_ili_convert_inx(pfw);
+					ipio_info("load inx panel ILI file");
 					break;
 				case 2 :
-					ilitek_tddi_fw_ili_convert_inx(pfw);
-					ipio_info("load old panel ILI file");
+					ilitek_tddi_fw_ili_convert_xl(pfw);
+					ipio_info("load xlgg3 panel ILI file");
 					break;
 				default:
 					ipio_info("load panel ILI file failed");

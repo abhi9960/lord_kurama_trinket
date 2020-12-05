@@ -22,6 +22,10 @@
 #ifndef __ILITEK_H
 #define __ILITEK_H
 
+#ifndef ODM_WT_EDIT
+#define ODM_WT_EDIT
+#endif
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -86,6 +90,8 @@
 #include <linux/of_gpio.h>
 #endif
 
+#include <soc/oppo/device_info.h>
+
 #ifdef CONFIG_FB
 //#include <linux/notifier.h>
 //#include <linux/fb.h>
@@ -125,25 +131,25 @@
 /* Path */
 #define DEBUG_DATA_FILE_SIZE		(10*K)
 #define DEBUG_DATA_FILE_PATH		"/sdcard/ILITEK_log.csv"
-#define CSV_LCM_ON_PATH			"/sdcard/fac_sources/mp_tp_on_log"
-#define CSV_LCM_OFF_PATH		"/sdcard/fac_sources/mp_tp_off_log"
+#define CSV_LCM_ON_PATH				"/sdcard/fac_sources/mp_tp_on_log"
+#define CSV_LCM_OFF_PATH			"/sdcard/fac_sources/mp_tp_off_log"
 //#define CSV_LCM_ON_PATH			"/data/vendor/fac_sources/ilitek_mp_lcm_on_log"
-//#define CSV_LCM_OFF_PATH		"/data/vendor/fac_sources/ilitek_mp_lcm_off_log"
+//#define CSV_LCM_OFF_PATH			"/data/vendor/fac_sources/ilitek_mp_lcm_off_log"
 
 #define XL_INI_NAME_PATH			    "/tp/19631/RA105A004.ini" ///vendor/firmware/mp.ini"
-#define INX_INI_NAME_PATH			    "/tp/19631/RA105X003.ini" ///vendor/firmware/mp.ini"
-#define INX_INI_NAME_PATH_6217			"/tp/19631/RA105X6217.ini" ///vendor/firmware/mp.ini"
+#define INX_INI_NAME_PATH			    "/tp/19743/RA170X1.ini" ///vendor/firmware/mp.ini"
+#define XLGG3_INI_NAME_PATH				"/tp/19743/RA170A1.ini" ///vendor/firmware/mp.ini"
 
 #define UPDATE_FW_PATH			"/vendor/firmware/tp/19631/"
 
 #ifdef ODM_WT_EDIT
 #define OPPO_FIRMWARE_NAME_PATH_AUO				"vendor/firmware/tp/19631/"
-#define OPPO_FIRMWARE_NAME_PATH_INX				"vendor/firmware/tp/19631/"
-//#define OPPO_FIRMWARE_NAME_PATH_INX_TEMP		"vendor/firmware/ilitek_fw_inx.bin"
+#define OPPO_FIRMWARE_NAME_PATH_INX				"vendor/firmware/tp/19743/"
+#define OPPO_FIRMWARE_NAME_PATH_AUOGG3			"vendor/firmware/tp/19743/"
 
 #define REQUEST_FW_PATH_AUO				"/tp/19631/RA105A0.bin"
-#define REQUEST_FW_PATH_INX				"/tp/19631/RA105X0.bin"
-#define REQUEST_FW_PATH_INX_6217		"/tp/19631/RA105X6217.bin"
+#define REQUEST_FW_PATH_INX				"/tp/19743/RA170X1.bin"
+#define REQUEST_FW_PATH_XLGG3			"/tp/19743/RA170A1.bin"
 #endif
 //#define REQUEST_FW_PATH			"/vendor/firmware/ilitek_fw_auo_20190417.bin"
 
@@ -153,7 +159,8 @@
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP,2019/06/05,Add sign firmware function begain
 #define OPPO_SIGN_AUO                  "tp/19631/ilitek_fw_xl_signed.bin"
-#define OPPO_SIGN_INX                  "tp/19631/ilitek_fw_inx_signed.bin"
+#define OPPO_SIGN_INX                  "tp/19743/ilitek_fw_inx_signed.bin"
+#define OPPO_SIGN_AUOGG3               "tp/19743/ilitek_fw_xlgg3_signed.bin"
 #endif
 
 #define DUMP_IRAM_PATH              "/sdcard/iram_dump"
@@ -675,6 +682,7 @@ struct ilitek_tddi_dev {
 	bool do_otp_check;
 	bool fw_uart_en;
 	bool suspend;
+	bool spi_gesture_cmd;
 	bool gesture_done;
 	bool psensor_close;
 	bool ignore_first_irq;
@@ -813,7 +821,7 @@ struct ili_gesture_info{
 typedef enum {
 	XL = 0,
 	INX = 1,
-	INX6217 = 2,
+	XLGG3 = 2,
 } ILITEK_MODULE_ID;
 
 struct upgrade_ili_fw_info {
@@ -927,6 +935,7 @@ extern int core_spi_upgrade_write(struct spi_device *spi,
 extern int ilitek_tddi_fw_dump_iram_data(u32 start, u32 end);
 
 extern bool is_resume;
+
 extern struct wakeup_source *reload_fw_ws;
 static inline void ipio_kfree(void **mem)
 {

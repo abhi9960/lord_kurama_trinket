@@ -25,6 +25,7 @@ bool mp_test_result = false;
 static uint32_t temp[5] = {0};
 extern struct ili_gesture_info * gesture_report_data;
 extern unsigned char g_user_buf[PAGE_SIZE];
+bool black_suspend_flag = false;
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP,2019/06/05,Add sign firmware function begain
 int sign_firmware = 0;
@@ -147,7 +148,7 @@ static ssize_t oppo_proc_black_screen_test_read(struct file *filp, char __user *
 		ipio_err("failed to alloc ptr memory\n");
 		return 0;
 	}
-	if(idev->suspend == false) {
+	if(black_suspend_flag == false) {
 		ipio_info("not in suspend,can not to do black mp test\n");
 		len = snprintf(ptr, 100,"please sleep in\n");
 		ret = copy_to_user(buff,ptr,len);
@@ -161,6 +162,7 @@ static ssize_t oppo_proc_black_screen_test_read(struct file *filp, char __user *
 		ret = copy_to_user(buff,ptr,len);
 		*pos += len;
 		kfree(ptr);
+		black_suspend_flag = false;
 		return len;
 	}
 	
@@ -184,6 +186,7 @@ static ssize_t oppo_proc_black_screen_test_read(struct file *filp, char __user *
 		ret = copy_to_user(buff,ptr,len);
 		*pos += len;
 	}
+	black_suspend_flag = false;
 	return len;
 
 }
@@ -201,6 +204,7 @@ static ssize_t oppo_proc_black_screen_test_write(struct file *file, const char _
 
 	idev->gesture_backup = idev->gesture;
     idev->gesture = true;
+	black_suspend_flag = true;
 OUT:
     return count;
 }
@@ -692,9 +696,9 @@ static ssize_t ilitek_proc_sign_firmware_write(struct file *filp, const char *bu
 #endif
 
 /*
-*0£º´¥·¢°æ±¾ºÅ²»Í¬¹Ì¼şÉı¼¶
-*1£º´¥·¢¹Ì¼şÇ¿ÖÆÉı¼¶
-*2£º´¥·¢´øÇ©Ãû¹Ì¼şÉı¼¶
+*0Â£ÂºÂ´Â¥Â·Â¢Â°Ã¦Â±Â¾ÂºÃ…Â²Â»ÃÂ¬Â¹ÃŒÂ¼Ã¾Ã‰Ã½Â¼Â¶
+*1Â£ÂºÂ´Â¥Â·Â¢Â¹ÃŒÂ¼Ã¾Ã‡Â¿Ã–Ã†Ã‰Ã½Â¼Â¶
+*2Â£ÂºÂ´Â¥Â·Â¢Â´Ã¸Ã‡Â©ÃƒÃ»Â¹ÃŒÂ¼Ã¾Ã‰Ã½Â¼Â¶
 */
 static ssize_t ilitek_proc_oppo_upgrade_fw_write(struct file *filp, const char *buff, size_t size, loff_t *pPos)
 {
@@ -766,6 +770,7 @@ static ssize_t oppo_proc_gesture_write(struct file *filp, const char *buff, size
 		if (idev->suspend) {
 			idev->psensor_close = false;
 			idev->gesture = true;
+			idev->spi_gesture_cmd = true;
 			temp[0] = 0xF6;
 			temp[1] = 0x0A;
 			 ipio_info("write prepare gesture command 0xF6 0x0A \n");
@@ -778,6 +783,7 @@ static ssize_t oppo_proc_gesture_write(struct file *filp, const char *buff, size
 			if ((idev->write(temp, 3)) < 0) {
 				ipio_info("write gesture command error\n");
 			}
+			idev->spi_gesture_cmd = false;
 		} else {
 			ipio_info("enable gesture mode\n");
 			idev->gesture = true;
@@ -792,7 +798,9 @@ static ssize_t oppo_proc_gesture_write(struct file *filp, const char *buff, size
 			/* sleep in */
 			ipio_debug(DEBUG_TOUCH, "core_config->isEnableGesture = false, enter gesture sleep\n");
 			idev->gesture = false;
+			idev->spi_gesture_cmd = true;
 			ilitek_tddi_ic_func_ctrl("sleep", SLEEP_IN);
+			idev->spi_gesture_cmd = false;			
 		} else {
 			ipio_debug(DEBUG_TOUCH, "gesture sleep doing nothing\n");
 		}
@@ -902,10 +910,10 @@ static ssize_t oppo_proc_i2c_device_read(struct file *file, char *buf,
   }
 
 /*
-*±ßÔµÒÖÖÆ£º
-*direction 0 : ÊúÆÁ       ¹Ì¼şÖ¸Áî01
-*direction 1 : ºáÆÁ90¶È   ¹Ì¼şÖ¸Áî02
-*direction 2 : ºáÆÁ270¶È  ¹Ì¼şÖ¸Áî00
+*Â±ÃŸÃ”ÂµÃ’Ã–Ã–Ã†Â£Âº
+*direction 0 : ÃŠÃºÃ†Ã       Â¹ÃŒÂ¼Ã¾Ã–Â¸ÃÃ®01
+*direction 1 : ÂºÃ¡Ã†Ã90Â¶Ãˆ   Â¹ÃŒÂ¼Ã¾Ã–Â¸ÃÃ®02
+*direction 2 : ÂºÃ¡Ã†Ã270Â¶Ãˆ  Â¹ÃŒÂ¼Ã¾Ã–Â¸ÃÃ®00
 */
 static ssize_t ilitek_limit_control_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {

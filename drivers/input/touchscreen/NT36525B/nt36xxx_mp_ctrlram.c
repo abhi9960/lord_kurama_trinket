@@ -1540,9 +1540,9 @@ int32_t nvt_selftest_open(struct inode *inode, struct file *file)
 		if (ts->vendor_id == 0) {
 			/* hlt */
 			snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-hlt");
-		} else {
-			/* skyw */
-			snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-skyw");
+		} else if ( ts->vendor_id == 1 ){
+			/* hltg */
+			snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-hlt");
 		}
 		if (nvt_mp_parse_dt(np, mpcriteria)) {
 			NVT_LOG("%s : Download Normal FW",__func__);
@@ -2342,8 +2342,8 @@ int oppo_nvt_blackscreen_test(void)
 		 */
 		if (ts->vendor_id == 0 ) {
 		    snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-hlt");
-		} else {
-			snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-skyw");
+		} else if ( ts->vendor_id == 1 ) {
+			snprintf(mpcriteria, PAGE_SIZE, "novatek-mp-criteria-hlt");
 		}
 
 		if (nvt_mp_parse_lpwg_dt(np, mpcriteria)) {

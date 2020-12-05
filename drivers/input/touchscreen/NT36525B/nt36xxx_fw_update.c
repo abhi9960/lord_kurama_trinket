@@ -42,11 +42,13 @@ struct timeval start, end;
 const struct firmware *fw_entry = NULL;
 const struct firmware *fw_entry_normal = NULL;
 const struct firmware *fw_entry_mp = NULL;
-static uint8_t request_and_download_normal_complete = false;
+uint8_t request_and_download_normal_complete = false;
+uint8_t request_and_download_sign_complete = false;
 static uint8_t request_and_download_mp_complete = false;
 static uint8_t *fwbuf = NULL;
 
 extern int NT_SIGN;
+extern int shutdown_nvt_flag;
 
 struct nvt_ts_bin_map {
 	char name[12];
@@ -266,23 +268,39 @@ struct firmware *request_fw_headfile = NULL;
 static void update_firmware_release(void)
 {
 	if ((request_and_download_normal_complete == true) &&
-			(request_and_download_mp_complete == true)) {
+			(request_and_download_mp_complete == true) && request_and_download_sign_complete == true) {
 		NVT_LOG("ignore release firmware\n");
 		return;
 	}
+    if(NT_SIGN == 0){
+	    if (request_and_download_normal_complete == false) {
+		    if (!IS_ERR_OR_NULL(request_fw_headfile)) {
+			    kfree(request_fw_headfile);
+			    request_fw_headfile = NULL;
+				fw_entry_normal = NULL;
+			    fw_entry = NULL;
+		    }
 
-	if (request_and_download_normal_complete == false) {
-		if (!IS_ERR_OR_NULL(request_fw_headfile)) {
-			kfree(request_fw_headfile);
-			request_fw_headfile = NULL;
-			fw_entry = NULL;
-		}
+		    if (!IS_ERR_OR_NULL(fw_entry_normal)) {
+			    release_firmware(fw_entry_normal);
+			    fw_entry_normal = NULL;
+		    }
+	    }
+    }else{
+        if (request_and_download_sign_complete == false) {
+		    if (!IS_ERR_OR_NULL(request_fw_headfile)) {
+			    kfree(request_fw_headfile);
+			    request_fw_headfile = NULL;
+				fw_entry_normal = NULL;
+			    fw_entry = NULL;
+		    }
 
-		if (!IS_ERR_OR_NULL(fw_entry_normal)) {
-			release_firmware(fw_entry_normal);
-			fw_entry_normal = NULL;
-		}
-	}
+		    if (!IS_ERR_OR_NULL(fw_entry_normal)) {
+			    release_firmware(fw_entry_normal);
+			    fw_entry_normal = NULL;
+		    }
+	    }
+     }
 
 	if (request_and_download_mp_complete == false) {
 		if (!IS_ERR_OR_NULL(fw_entry_mp)) {
@@ -323,9 +341,10 @@ static int32_t update_firmware_request(char *filename)
 			NVT_LOG("since NVT_LOG = %d,swith to firmware_sign_name\n",NT_SIGN);
 			filename = fw->firmware_sign_name;
 		}
-
+        NVT_LOG("NT_SIGN = %d,filename is %s\n", NT_SIGN,filename);
 		NVT_LOG("Check the status of request_and_download_normal_complete = %d\n", request_and_download_normal_complete);
-		if (ts->recovery_flag == 0) {
+        NVT_LOG("Check the status of request_and_download_sign_complete = %d\n", request_and_download_sign_complete);
+		if (NT_SIGN == 0) {
 			/* request NORMAL firmware on the first time. */
 			if ((request_and_download_normal_complete == false) &&
 					(!strcmp(filename, fw->firmware_name))) {
@@ -339,9 +358,6 @@ static int32_t update_firmware_request(char *filename)
 						ret = -1;
 						goto request_fail;
 					}
-
-					//request_fw_headfile->size = sizeof(FIRMWARE_DATA_AUO);
-					//request_fw_headfile->data = FIRMWARE_DATA_AUO;
 					request_fw_headfile->size = fw->fw_len;
 					request_fw_headfile->data = fw->fw_file;
 
@@ -349,10 +365,10 @@ static int32_t update_firmware_request(char *filename)
 				}
 			}
 			/* request NORMAL sign firmware on the first time. */
-		}else if ((request_and_download_normal_complete == false) &&
-					(!strcmp(filename, fw->firmware_sign_name))) {
+		}else if ((request_and_download_sign_complete == false) &&
+					(!strcmp(filename, fw->firmware_sign_name)) && (NT_SIGN == 1)) {
 				NVT_LOG("request normal sign firmware\n");
-				ret = request_firmware(&fw_entry_normal, filename, &ts->client->dev);
+				ret = request_firmware_select(&fw_entry_normal, filename, &ts->client->dev);
 				if (ret) {
 					NVT_LOG("request normal firmware failed, get from headfile\n");
 					request_fw_headfile = kzalloc(sizeof(struct firmware), GFP_KERNEL);
@@ -361,9 +377,6 @@ static int32_t update_firmware_request(char *filename)
 						ret = -1;
 						goto request_fail;
 					}
-
-					//request_fw_headfile->size = sizeof(FIRMWARE_DATA_AUO);
-					//request_fw_headfile->data = FIRMWARE_DATA_AUO;
 					request_fw_headfile->size = fw->fw_len;
 					request_fw_headfile->data = fw->fw_file;
 					fw_entry_normal = request_fw_headfile;
@@ -405,7 +418,7 @@ static int32_t update_firmware_request(char *filename)
 			}
 		} else if (!strcmp(filename, fw->firmware_sign_name)) {
 			fw_entry = fw_entry_normal;
-			if (request_and_download_normal_complete) {
+			if (request_and_download_sign_complete) {
 				NVT_LOG("use backup normal sign fw\n");
 			}
 		}
@@ -435,7 +448,7 @@ static int32_t update_firmware_request(char *filename)
 			goto invalid;
 		}
 
-
+        NVT_ERR("FW_VER=0x%02X, FW_VER_BAR=0x%02X\n", *(fw_entry->data+FW_BIN_VER_OFFSET), *(fw_entry->data+FW_BIN_VER_BAR_OFFSET));
 		NVT_LOG("FW type is 0x%02X\n", *(fw_entry->data + FW_BIN_TYPE_OFFSET));
 
 		/* BIN Header Parser */
@@ -831,6 +844,8 @@ void nvt_update_firmware(char *firmware_name)
 {
 	int8_t ret = 0;
 
+	if(shutdown_nvt_flag)
+		return;
 	// request bin file in "/etc/firmware"
 	ret = update_firmware_request(firmware_name);
 	if (ret) {
@@ -875,7 +890,7 @@ void nvt_update_firmware(char *firmware_name)
 	} else if (!strcmp(firmware_name, fw->firmware_mp_name)) {
 		request_and_download_mp_complete = true;
 	} else if (!strcmp(firmware_name, fw->firmware_sign_name)){
-		request_and_download_mp_complete = true;
+		request_and_download_sign_complete = true;
 	} else{
 		NVT_ERR("firmware_name is abnormal. \n");
 	}

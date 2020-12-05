@@ -18,6 +18,10 @@
 #ifndef 	_LINUX_NVT_TOUCH_H
 #define		_LINUX_NVT_TOUCH_H
 
+#ifndef 	ODM_WT_EDIT
+#define		ODM_WT_EDIT
+#endif
+
 #include <linux/spi/spi.h>
 #include <linux/of.h>
 #include <linux/input.h>
@@ -28,7 +32,7 @@
 
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.Tp,2018/10/11,Add touch-info file function
-#include<linux/input/touch-info.h>
+//#include<linux/input/touch-info.h>
 #include<linux/workqueue.h>
 #endif
 
@@ -188,15 +192,15 @@ struct oppo_debug_gesture_record_info {
 #define BOOT_UPDATE_FIRMWARE 1
 #ifdef ODM_WT_EDIT
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2018/12/04,Add skyw novatek TP IC
-#define BOOT_UPDATE_FIRMWARE_TCL_NAME "novatek_cost_fw.bin"
+#define BOOT_UPDATE_FIRMWARE_HLTG_NAME "tp/19743/nt_hltg_fw.bin"
 #define BOOT_UPDATE_FIRMWARE_SKYW_NAME "novatek_skyw_fw.bin"
 #define BOOT_UPDATE_FIRMWARE_HLT_NAME "tp/19631/nt_hlt_fw.bin"
 
-#define MP_UPDATE_FIRMWARE_TCL_NAME "novatek_cost_fw_mp.bin"
+#define MP_UPDATE_FIRMWARE_HLTG_NAME "tp/19743/nt_hltg_fw_mp.bin"
 #define MP_UPDATE_FIRMWARE_SKYW_NAME "novatek_skyw_fw_mp.bin"
 #define MP_UPDATE_FIRMWARE_HLT_NAME "tp/19631/nt_hlt_fw_mp.bin"
 
-#define OPPO_BOOT_UPDATE_FIRMWARE_NAME_TCL "vendor/firmware/novatek_tcl_fw.bin"
+#define OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLTG "tp/19743/nt_hltg_fw_signed.bin"
 #define OPPO_BOOT_UPDATE_FIRMWARE_NAME_SK "vendor/firmware/novatek_skyw_fw.bin"
 #define OPPO_BOOT_UPDATE_FIRMWARE_NAME_HLT "tp/19631/nt_hlt_fw_signed.bin"
 
@@ -218,8 +222,10 @@ struct nvt_oppo_data {
 	struct proc_dir_entry *oppo_tp_limit_enable_entry;
 	struct proc_dir_entry *oppo_tp_direction_entry;
 #ifdef ODM_WT_EDIT
-//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
-	struct proc_dir_entry *oppo_tp_hop_test_entry;
+//Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING
+	struct proc_dir_entry *freq_hop_simulate_entry;
+	struct proc_dir_entry *fix_hop_simulate_entry;
+
 #endif
 	//struct proc_dir_entry *ps_status_entry;
 	struct proc_dir_entry *tp_fw_update_entry;
@@ -326,7 +332,7 @@ struct nvt_flash_data{
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2018/12/04,Add skyw novatek TP IC
 typedef enum {
 	HLT  = 0,
-	COST = 1,
+	HLTG = 1,
 	SKYW = 2,
 } NVT_MODULE_ID;
 
@@ -389,6 +395,9 @@ typedef enum {
 //Bin.Su@ODM_WT.BSP.TP.FUNCTION.2019/04/24,add HOPPING_POLLING
 #define HOST_CMD_HOPPING_POLLING_ON   (0x73)
 #define HOST_CMD_HOPPING_POLLING_OFF  (0x74)
+#define HOST_CMD_HOPPING_FIX_FREQ_ON  (0x75)
+#define HOST_CMD_HOPPING_FIX_FREQ_OFF (0x76)
+
 #endif
 
 #define HOST_CMD_JITTER_ON      (0x7D)

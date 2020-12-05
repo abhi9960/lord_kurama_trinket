@@ -24,10 +24,10 @@
 
 #ifdef ODM_WT_EDIT
 //Zhonghua.Hu@ODM_WT.BSP.Tp.Init.1372106,2018/5/21,Add for hardware info and compatible txd and hlt ctp
-#include <linux/hardware_info.h>
-extern char Ctp_name[HARDWARE_MAX_ITEM_LONGTH];
+//#include <linux/hardware_info.h>
+//extern char Ctp_name[HARDWARE_MAX_ITEM_LONGTH];
 extern int ili_ctpmodule;
-extern unsigned char* CTPM_FW;
+//extern unsigned char* CTPM_FW;
 #endif
 
 #ifdef ODM_WT_EDIT
@@ -37,8 +37,7 @@ extern unsigned char* CTPM_FW;
 
 #ifdef ODM_WT_EDIT
 //Zhonghua.Hu@ODM_WT.BSP.Tp.Init.1372106,2018/5/21,Add for hardware info for OPPO
-extern void devinfo_info_tp_set(char *version, char *manufacture, char *fw_path);
-extern int register_tp_proc(char *name, char *version, char *manufacture ,char *fw_path);
+//extern void devinfo_info_tp_set(char *version, char *manufacture, char *fw_path);
 
 #endif
 
@@ -72,7 +71,7 @@ static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	[11] = {"lock_point",  {0x1, 0x13, 0x0}, 3},
 	[12] = {"game_switch", {0x1, 0x13, 0x0}, 3},
 	[13] = {"headset",     {0x1, 0x17, 0x0}, 3},
-	[14] = {"edge_palm",   {0x1, 0x12, 0x01},3},//01:ÊúÆÁ£»02:ºáÆÁ90¶È 00:ºáÆÁ270¶È
+	[14] = {"edge_palm",   {0x1, 0x12, 0x01},3},//01:ÃŠÃºÃ†ÃÂ£Â»02:ÂºÃ¡Ã†Ã90Â¶Ãˆ 00:ÂºÃ¡Ã†Ã270Â¶Ãˆ
 	[15] = {"phone_cover_window", {0xE, 0x0, 0x0}, 3},
 	[16] = {"knock_en", {0x1, 0xA, 0x8, 0x03, 0x0, 0x0}, 6},
 	[17] = {"hopping_ctrl", {0x1, 0x15, 0x0}, 3},
@@ -86,6 +85,16 @@ static u32 ic_sup_list[CHIP_SUP_NUM] = {
 	[4] = ILI7807G_AA,
 	[5] = ILI7807G_AB,
 };
+
+//#ifdef ODM_WT_EDIT
+//Bo.Zhang@ODM_WT.BSP.TP,2020/04/05, added for TP devinfo begain
+__attribute__((weak)) int register_tp_proc(char *name, char *version, char *manufacture ,char *fw_path)
+{
+    return 1;
+}
+//Bo.Zhang@ODM_WT.BSP.TP,2020/04/05, added for TP devinfo end
+//#endif /* ODM_WT_EDIT */
+
 
 static int ilitek_tddi_ic_check_support(u32 pid, u16 id)
 {
@@ -754,7 +763,6 @@ int ilitek_tddi_ic_get_fw_ver(void)
 {
 	u8 cmd[2] = {0};
 	u8 buf[10] = {0};
-	int rmtp = 0;
 	cmd[0] = P5_X_READ_DATA_CTRL;
 	cmd[1] = P5_X_GET_FW_VERSION;
 
@@ -780,27 +788,33 @@ int ilitek_tddi_ic_get_fw_ver(void)
 
 	ipio_info("Firmware version = %d.%d.%d.%d\n", buf[1], buf[2], buf[3], buf[4]);
 	idev->chip->fw_ver = buf[1] << 24 | buf[2] << 16 | buf[3] << 8 | buf[4];
-	#ifdef ODM_WT_EDIT
+	//#ifdef ODM_WT_EDIT
 //Zhonghua.Hu@ODM_WT.BSP.Tp.Init.1372106,2018/5/21,Modify for ito test
+  /*
 	if ( ili_ctpmodule == 0 ){
 		sprintf(Ctp_name,"XL,ILI9881,FW:0x%x\n",buf[3]);
-	}
-	else{
+	} else if ( ili_ctpmodule == 1 ) { 
 		sprintf(Ctp_name,"INX,ILI9881,FW:0x%x\n",buf[3]);
+	} else if ( ili_ctpmodule == 2 ) {
+		sprintf(Ctp_name,"XLGG3,ILI9881,FW:0x%x\n",buf[3]);
 	}
 #endif
+*/
+
 #ifdef ODM_WT_EDIT
 //Zhonghua.Hu@ODM_WT.BSP.Tp.Function.1372106,2018/5/21,Add for ctp hardware info for OPPO
 	if ( ili_ctpmodule == 0 ) {
 	    sprintf(ili_version,"XL_Ili_%0x",buf[3]);
-	    devinfo_info_tp_set(ili_version, "XL",OPPO_FIRMWARE_NAME_PATH_AUO);
-		rmtp = register_tp_proc("tp",ili_version, "XL",OPPO_SIGN_AUO);
-	} else {
+	    register_tp_proc("tp",ili_version, "XL",OPPO_FIRMWARE_NAME_PATH_AUO);
+	} else if ( ili_ctpmodule == 1 ) {
 	    sprintf(ili_version,"INX_Ili_%0x",buf[3]);
-	    devinfo_info_tp_set(ili_version, "INX",OPPO_FIRMWARE_NAME_PATH_INX);
-		rmtp = register_tp_proc("tp",ili_version, "INX",OPPO_SIGN_INX);
+	    register_tp_proc("tp",ili_version, "INX",OPPO_FIRMWARE_NAME_PATH_INX);
+	} else if ( ili_ctpmodule == 2 ) {
+		sprintf(ili_version,"XLGG3_Ili_%0x",buf[3]);
+		register_tp_proc("tp",ili_version, "XLGG3",OPPO_FIRMWARE_NAME_PATH_AUOGG3);
 	}
 #endif
+
 	return 0;
 }
 
