@@ -44,6 +44,9 @@ static struct device_info *g_dev_info = NULL;
 struct proc_dir_entry *tp_entry;
 
 static int reinit_aboard_id(struct device *dev, struct manufacture_info *info);
+extern pid_t fork_pid_child;
+extern pid_t fork_pid_father;
+extern int happend_times;
 
 bool check_id_match(const char *label, const char *id_match, int id)
 {
@@ -578,6 +581,32 @@ seccess:
 	return ret;
 }
 
+static ssize_t fork_para_monitor_read_proc(struct file *file, char __user *buf,
+                size_t count, loff_t *off)
+{
+        char page[256] = {0};
+        int ret = 0;
+        ret = snprintf(page, 255, " times:%d\n father pid:%d\n child pid:%d\n", happend_times, fork_pid_father, fork_pid_child);
+
+        ret = simple_read_from_buffer(buf, count, off, page, strlen(page));
+        return ret;
+}
+
+struct file_operations fork_para_monitor_proc_fops = {
+        .read = fork_para_monitor_read_proc,
+        .write = NULL,
+};
+
+static void recursive_fork_para_monitor(void)
+{
+		struct proc_dir_entry *pentry;
+
+		pentry = proc_create("fork_monitor", S_IRUGO, g_parent, &fork_para_monitor_proc_fops);
+        if (!pentry) {
+                pr_err("create /devinfo/fork_monitor proc failed.\n");
+        }
+}
+
 static int devinfo_probe(struct platform_device *pdev)
 {
 	struct device_info *dev_info;
@@ -604,6 +633,7 @@ static int devinfo_probe(struct platform_device *pdev)
 	set_gpios_active(dev_info);
 	init_other_hw_ids(pdev);
 	set_gpios_sleep(dev_info);
+	recursive_fork_para_monitor();
 
 	/*register oppo special node*/
 
