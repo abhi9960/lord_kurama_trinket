@@ -1,4 +1,4 @@
-# ifdef VENDOR_EDIT
+# ifdef VENDOR_EDIT 
 # yixue.ge add for config oppo software devinfo soft
       config OPPO_DEVICE_IFNO
       bool "config oppo devinfo software"
