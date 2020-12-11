@@ -802,8 +802,9 @@ try_again:
 			if (ocr & R4_18V_PRESENT) {
 				/* Retry init sequence, but without R4_18V_PRESENT. */
 				retries = 0;
+			} else {
+				goto remove;
 			}
-			return err;
 		}
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 	}
