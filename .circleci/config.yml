@@ -1,9 +1,0 @@
-version: 2
-jobs:
-  build:
-    docker:
-      - image: rama982/dokar:clang-aosp
-    steps:
-      - run: git clone --recurse-submodules --depth 1 https://github.com/dodyirawan85/android_kernel_realme_trinket .
-      - run: curl -OsSL https://gitlab.com/dodyirawan85/scripts/raw/master/r5x-kernel-on-docker.sh
-      - run: bash r5x-kernel-on-docker.sh
